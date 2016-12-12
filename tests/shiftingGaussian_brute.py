@@ -340,7 +340,48 @@ samples = sampler.chain[:, -200:, :].reshape((-1, ndim))
 import corner
 fig = corner.corner(samples, labels=["$sigma$", "$m$", "$b$"],
                       truths=[sigma_true, m_true, b_true])
+
+
+
+
+
+#####
+# NOW RUN A PARALLEL TEMPERING MCMC
+nPTtemps = 20
+nPTwalkers = 100
+ptSampler = emcee.PTSampler( nPTtemps, nPTwalkers, ndim, 
+                      numLnlikeFromProjProb, lnPriors)
 #
+p0 = optimizeResult["x"] + 1e-3*np.random.randn(nPTtemps,nPTwalkers,ndim)
+for p, lnl, lnp in ptSampler.sample(p0,iterations=1000, threads=10):
+    pass
+ptSampler.reset()
+for p, lnl, lnp in ptSampler.sample( p, lnprob0=lnp, lnlike0=lnl, 
+                                    iterations=10000,thin=10, threads=10):
+    pass
+
+
+zeroTempChain = ptSampler.chain[0,...]
+zeroTempSamples = zeroTempChain.reshape((-1,ndim))
+
+plot.figure(50)
+plot.plot(zeroTempChain[:,:,0].T,'-',alpha=0.3)
+plot.ylabel('sigma')
+plot.show()
+
+plot.figure(51)
+plot.plot(zeroTempChain[:,:,1].T,'-',alpha=0.3)
+plot.ylabel('m')
+plot.show()
+
+plot.figure(52)
+plot.plot(zeroTempChain[:,:,2].T,'-',alpha=0.3)
+plot.ylabel('b')
+plot.show()
+
+
+fig = corner.corner(zeroTempSamples, labels=["$sigma$", "$m$", "$b$"],
+                      truths=[sigma_true, m_true, b_true])
 #
 #import matplotlib.pyplot as pl
 #xl = np.array([0, 10])

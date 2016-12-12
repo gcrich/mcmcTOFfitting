@@ -187,7 +187,7 @@ with basic_model:
     #eD_params[1] = Uniform('eD_param1', lower=-100.0, upper=0.0 )
     #eD_params[2] = Uniform('eD_param2', lower=-10.0, upper=0.0)
     eD_sigma = Uniform('eD_sigma', lower=20.0, upper =100.0)
-    eD_params[0] = Uniform('eD_param0', lower=800.0, upper=1200.0)
+    eD_params[0] = Uniform('eD_param0', lower=800.0, upper=1500.0)
     eD_params[1] = Uniform('eD_param1', lower=-200.0, upper=0.0)
     eD_params[2] = Uniform('eD_param2', lower=-20.0, upper=0.0)
     eD_params[3] = Uniform('eD_param3', lower=-10.0, upper=0.0)
@@ -208,15 +208,16 @@ with basic_model:
     
     # Likelihood (sampling distribution) of observations
     Y_obs = Normal('energy_neutron', mu=en_mean, sd=eD_sigma, 
-                   observed=energy_neutron_data)
+                   observed=energy_neutron)
 
  #   map_estimate = find_MAP(model=basic_model)
     map_estimate = find_MAP(model=basic_model, fmin=optimize.fmin_powell)
 
     #step = pm.NUTS(state=map_estimate)
-    step = pm.Metropolis(vars=[eD_params[0],eD_params[1],eD_params[2], eD_params[3], eD_sigma]) # Instantiate MCMC sampling algorithm    
+    step = pm.Metropolis(state=map_estimate, vars=[eD_params[0],eD_params[1],eD_params[2], eD_params[3], eD_sigma]) # Instantiate MCMC sampling algorithm    
+    #step = pm.HamiltonianMC(state=map_estimate, vars=[eD_params[0],eD_params[1],eD_params[2], eD_params[3], eD_sigma])
     #trace=sample( 7000, step, start=map_estimate, njobs=4)
-    trace=sample( 40000, step, start=map_estimate, njobs=8)
+    trace=sample( 100000, step, start=map_estimate, njobs=8)
     
 traceplot(trace[-2000:])
 summary(trace[-2000:])

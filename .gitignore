@@ -1,0 +1,16 @@
+# a lot of this is from github gitignore templates
+
+# spyder project settings
+.spyderproject
+
+# installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# object stuff for python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# in case any C things get included and built
+*.so

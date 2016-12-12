@@ -16,7 +16,7 @@ import numpy as np
 from scipy.special import erf
 from scipy.integrate import quad
 import scipy.optimize as optimize
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plot
 import emcee
 
 xMax = 10.0
@@ -75,7 +75,6 @@ def lnlike(sigma, m, b, observable):
     #sigma, m, b = modelParams
     #print('sigma {}, m {}, b {}'.format(sigma,m,b))
     y = observable # for convenience inside the function
-    N = len(y)
     #print('number of y vals {}'.format(N))
     loglikelihood, err = quad(lnlikesub,xMin,xMax, args=(m, b, sigma, y) )
     return loglikelihood
@@ -148,28 +147,28 @@ def lnprobNumeric(modelParams, observables):
 
   
 sigma_true = 0.5
-m_true=-0.15
+m_true=0.0
 b_true=6.3
 
 sigma_bad = 0.4
 m_bad = -0.2
 b_bad = 6.2
     
-nSamples = 50
+nSamples = 500
 
 xVals = np.random.uniform(low=xMin, high=xMax, size=nSamples)
 yVals = np.random.normal(getShiftingMean(xVals,m_true,b_true), sigma_true)
 yVals_bad = np.random.normal(getShiftingMean(xVals,m_bad,b_bad),sigma_bad)
 
-plt.figure(1)
-plt.scatter(xVals,yVals,color='green')
-plt.scatter(xVals,yVals_bad,color='red',alpha=0.3)
-plt.show()
+plot.figure(1)
+plot.scatter(xVals,yVals,color='green')
+plot.scatter(xVals,yVals_bad,color='red',alpha=0.3)
+plot.show()
 
-plt.figure(2)
-plt.hist(yVals,bins=100,color='green')
-plt.hist(yVals_bad, bins=100,color='red',alpha=0.3)
-plt.show()
+plot.figure(2)
+plot.hist(yVals,bins=100,color='green')
+plot.hist(yVals_bad, bins=100,color='red',alpha=0.3)
+plot.show()
 
 
 fxnIntegral = quad(getProjectedProb, -20, 20, 
@@ -180,10 +179,10 @@ scaleFactor = nSamples / fxnIntegral[0]
 pdfPlotX = np.linspace(-20,20,100)
 pdfPlotY = getProjectedProb(pdfPlotX,m_true,b_true,sigma_true, xMin,xMax)
 numericalPdfY = getNumProjectedProb(sigma_true, m_true, b_true, pdfPlotX)
-plt.figure(3)
-plt.scatter(pdfPlotX,pdfPlotY, color='green', alpha=0.3)
-plt.scatter(pdfPlotX, numericalPdfY, color='k', alpha=0.3)
-plt.show()
+plot.figure(3)
+plot.scatter(pdfPlotX,pdfPlotY, color='green', alpha=0.3)
+plot.scatter(pdfPlotX, numericalPdfY, color='k', alpha=0.3)
+plot.show()
 
 testPoint1 = 6
 testPoint2 = 0
@@ -239,25 +238,25 @@ print('NLL value from numerical approach {}'.format(numericNLLtrue))
 print('NLL numeric, slightly bad values {}'.format(
       numericalNLL([sigma_bad, m_bad, b_bad], yVals)))
 
-nllX_sig = np.linspace(0.05,1.0,100)
+nllX_sig = np.linspace(np.exp(0.05),np.exp(1.0),100)
 nllY_sig_num = []
 for xVal in nllX_sig:
-    nllY_sig_num.append( numericalNLL([xVal,m_true,b_true], yVals) )
-plt.figure(4)
-plt.scatter(nllX_sig,nllY_sig_num)
-plt.xlabel('sigma')
-plt.ylabel('NLL value')
-plt.show()
+    nllY_sig_num.append( numericalNLL([np.log(xVal),m_true,b_true], yVals) )
+plot.figure(4)
+plot.scatter(nllX_sig,nllY_sig_num)
+plot.xlabel('sigma')
+plot.ylabel('NLL value')
+plot.show()
 
 nllX_b = np.linspace(0.,7.,70)
 nllY_b = []
 for xVal in nllX_b:
     nllY_b.append(numericalNLL([sigma_true,m_true,xVal],yVals))
-plt.figure(5)
-plt.scatter(nllX_b,nllY_b)
-plt.xlabel('b (offset of shifting mean)')
-plt.ylabel('NLL value')
-plt.show()
+plot.figure(5)
+plot.scatter(nllX_b,nllY_b)
+plot.xlabel('b (offset of shifting mean)')
+plot.ylabel('NLL value')
+plot.show()
 
 optimizeResult = optimize.minimize(numericalNLL, [sigma_true,m_true,b_true], args=yVals)
 print(optimizeResult)
@@ -294,35 +293,47 @@ print(optimizeResult)
 #    return lp + lnlike(theta, x, y, yerr)
 #    
 #######################################
-ndim, nwalkers = 3, 100
+ndim, nwalkers = 3, 250
 
 sigma, m, b = [0.4, -0.3, 5]
 pos = [[sigma, m, b] + 1e-4*np.random.randn(ndim) for i in range(nwalkers)]
 print(type(yVals))
 print(len(yVals))
 sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprobNumeric, 
-                                kwargs={'observables': yVals}, threads = 4)
-sampler.run_mcmc(pos, 500)
+                                kwargs={'observables': yVals}, threads = 8)
+sampler.run_mcmc(pos, 1000)
 
 
-plt.figure(10)
-plt.plot(sampler.chain[:,:,0].T,'-',alpha=0.3)
-plt.ylabel('sigma')
-plt.show()
+plot.figure(10)
+plot.plot(sampler.chain[:,:,0].T,'-',alpha=0.3)
+plot.ylabel('sigma')
+plot.show()
 
-plt.figure(11)
-plt.plot(sampler.chain[:,:,1].T,'-',alpha=0.3)
-plt.ylabel('m')
-plt.show()
+plot.figure(11)
+plot.plot(sampler.chain[:,:,1].T,'-',alpha=0.3)
+plot.ylabel('m')
+plot.show()
 
-plt.figure(12)
-plt.plot(sampler.chain[:,:,2].T,'-',alpha=0.3)
-plt.ylabel('b')
-plt.show()
+plot.figure(12)
+plot.plot(sampler.chain[:,:,2].T,'-',alpha=0.3)
+plot.ylabel('b')
+plot.show()
 #######################################
 #
+# let's print some diagnostics
+#autocorrelations = sampler.acor
+#print('autocorrelation time for sigma {}, m {}, b {}'.format(
+#      autocorrelations[0], autocorrelations[1], autocorrelations[2]) )
+
+
+acceptanceFractions = sampler.acceptance_fraction
+plot.figure(21)
+plot.hist(acceptanceFractions, bins=50)
+plot.xlabel('acceptance fraction')
+plot.ylabel('counts')
+plot.show()
 #
-samples = sampler.chain[:, 50:, :].reshape((-1, ndim))
+samples = sampler.chain[:, -200:, :].reshape((-1, ndim))
 #
 #
 #

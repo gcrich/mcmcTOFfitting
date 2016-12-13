@@ -5,6 +5,8 @@
 #
 # intended to demo and develop MC-based integration of models
 # needed to numerically evaluate likelihoods / probabilities
+# 
+# all the 'magic' here is in the functions lnlike and generateModelData
 
 import numpy as np
 from numpy import inf
@@ -31,6 +33,13 @@ qValue_ddn = 3268.914
 distance_cellToZero = 518.055 # cm, distance from tip of gas cell to 0deg face
 distance_cellLength = 2.86 # cm, length of gas cell
 distance_zeroDegLength = 3.81 # cm, length of 0deg detector
+
+##############
+# vars for binning of TOF 
+tof_nBins = 25
+tof_minRange = 175.0
+tof_maxRange = 200.0
+tof_range = (tof_minRange,tof_maxRange)
 
 
 def getDDneutronEnergy(deuteronEnergy, labAngle = 0):
@@ -100,7 +109,7 @@ def lnlike(params, observables, nDraws=2000000):
     """
     #print('checking type ({}) and length ({}) of params in lnlikefxn'.format(type(params),len(params)))
     evalData=generateModelData(params, nDraws)
-    evalHist, evalBinEdges = np.histogram(evalData[:,3], 25, (175.0,200.0),
+    evalHist, evalBinEdges = np.histogram(evalData[:,3], tof_nBins, tof_range,
                                           density=True)
     logEvalHist = np.log(evalHist)
     #print(logEvalHist)
@@ -179,7 +188,8 @@ plot.ylabel('Deuteron energy (keV)')
 plot.xlabel('Location in cell (cm)')
 plot.show()
 
-histTOFdata, tof_bin_edges = np.histogram(fakeDataSet[:,3], 25, (175.0,200.0),
+histTOFdata, tof_bin_edges = np.histogram(fakeDataSet[:,3], tof_nBins, 
+                                          tof_range,
                                           density=True)
 plot.figure(20)
 plot.scatter(tof_bin_edges[:-1], histTOFdata, color='k')
@@ -201,8 +211,8 @@ fakeObsData = generateModelData([mp_initialEnergy_t,mp_loss0_t,mp_sigma_t],
 
 
 # make our vector of 'n'
-observedVectorN, observed_bin_edges = np.histogram(fakeObsData[:,3], 25,
-                                                   (175.0,200.0))
+observedVectorN, observed_bin_edges = np.histogram(fakeObsData[:,3], tof_nBins,
+                                                   tof_range)
 
 
 loghist = np.log(histTOFdata)
@@ -255,7 +265,7 @@ for loss in lossVals:
 
 plot.figure()
 plot.subplot(221)
-plot.hist(fakeObsData[:,3], 25, (175.0,200.0))
+plot.hist(fakeObsData[:,3], tof_nBins, tof_range)
 plot.subplot(223)
 plot.scatter(multiplier,nll_sigmas)
 plot.xlabel('fraction sigma TRUE')

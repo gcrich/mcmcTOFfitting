@@ -95,7 +95,7 @@ def lnlikeFromProjProb(modelParams, observable):
     
     return loglikelihood
     
-def numLnlikeFromProjProb(modelParams, observable):
+def numLnlikeFromProjProb(modelParams, observables):
     """Get the log likelihood from the numerically projected PDF
     argument modelParams is an array of the model parameters, [sigma, m, b]
     argument observables is an array of data to fit against
@@ -104,7 +104,7 @@ def numLnlikeFromProjProb(modelParams, observable):
     #xMin=-10
     sigma, m, b = modelParams
     #print('sigma {}, m {}, b {}'.format(sigma,m,b))
-    y = observable # for convenience inside the function
+    y = observables # for convenience inside the function
     projectedProbabilities = getNumProjectedProb( sigma, m, b, y)
     logProjProbs = np.log(projectedProbabilities)
     loglikelihood = np.sum(logProjProbs)
@@ -293,15 +293,15 @@ print(optimizeResult)
 #    return lp + lnlike(theta, x, y, yerr)
 #    
 #######################################
-ndim, nwalkers = 3, 250
+ndim, nwalkers = 3, 100
 
 sigma, m, b = [0.4, -0.3, 5]
 pos = [[sigma, m, b] + 1e-4*np.random.randn(ndim) for i in range(nwalkers)]
 print(type(yVals))
 print(len(yVals))
 sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprobNumeric, 
-                                kwargs={'observables': yVals}, threads = 8)
-sampler.run_mcmc(pos, 1000)
+                                kwargs={'observables': yVals}, threads = 10)
+sampler.run_mcmc(pos, 500)
 
 
 plot.figure(10)
@@ -333,7 +333,7 @@ plot.xlabel('acceptance fraction')
 plot.ylabel('counts')
 plot.show()
 #
-samples = sampler.chain[:, -200:, :].reshape((-1, ndim))
+samples = sampler.chain[:,200:, :].reshape((-1, ndim))
 #
 #
 #
@@ -350,14 +350,15 @@ fig = corner.corner(samples, labels=["$sigma$", "$m$", "$b$"],
 nPTtemps = 20
 nPTwalkers = 100
 ptSampler = emcee.PTSampler( nPTtemps, nPTwalkers, ndim, 
-                      numLnlikeFromProjProb, lnPriors)
+                      numLnlikeFromProjProb, lnPriors, threads=10,
+                      loglkwargs={'observables': yVals})
 #
-p0 = optimizeResult["x"] + 1e-3*np.random.randn(nPTtemps,nPTwalkers,ndim)
-for p, lnl, lnp in ptSampler.sample(p0,iterations=1000, threads=10):
+p0 = [sigma, m, b] + 1e-3*np.random.randn(nPTtemps,nPTwalkers,ndim)
+for p, lnl, lnp in ptSampler.sample(p0,iterations=1000):
     pass
 ptSampler.reset()
 for p, lnl, lnp in ptSampler.sample( p, lnprob0=lnp, lnlike0=lnl, 
-                                    iterations=10000,thin=10, threads=10):
+                                    iterations=10000,thin=10):
     pass
 
 

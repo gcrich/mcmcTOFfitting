@@ -7,6 +7,7 @@
 # needed to numerically evaluate likelihoods / probabilities
 
 import numpy as np
+from numpy import inf
 from scipy.integrate import quad
 import scipy.optimize as optimize
 import matplotlib.pyplot as plot
@@ -70,6 +71,26 @@ def evaluateModel( params, coords):
     return returnVal / (mp_sigma*np.sqrt(2*np.pi))
     
     
+def generateModelData(params, nSamples):
+    """Generate some fake data from our mode with num samples = nSamples
+    params is an array of the parameters, [e0, e1, sigma]
+    Returns a tuple of len(nSamples), [x, ed, en, tof]
+    """
+    data_x=np.random.uniform(low=0.0, high=distance_cellLength, size=nSamples)
+    data_ed= np.random.normal(loc=params[0] + params[1]*data_x, 
+                              scale=params[2])
+    data_en = getDDneutronEnergy(data_ed)
+    
+    neutronDistance = distance_cellToZero + (distance_cellLength - data_x)
+    neutronTOF = getTOF(mass_neutron, data_en, neutronDistance)
+    effectiveDenergy = (params[0] + data_ed)/2
+    deuteronTOF = getTOF( mass_deuteron, effectiveDenergy, data_x )
+    data_tof = neutronTOF + deuteronTOF
+    
+    data = np.column_stack((data_x,data_ed,data_en,data_tof))
+    return data
+    
+    
 # mp_* are model parameters
 # *_t are 'true' values that go into our fake data
 mp_initialEnergy_t = 1100 # initial deuteron energy, in keV
@@ -78,7 +99,7 @@ mp_sigma_t = 50 # width of deuteron energy spread, fixed for now, in keV
 
 
 # generate fake data
-nSamples = 10000
+nSamples = 1000000
 data_model_x = np.random.uniform(low=0.0, high=distance_cellLength, 
                                  size=nSamples)
 data_model_ed = np.random.normal(loc=mp_initialEnergy_t + 
@@ -97,7 +118,7 @@ modelTOFdata = neutronTOF + deuteronTOF
 
 # plot the fake data...
 plot.figure(1)
-plot.scatter(data_model_x, data_model_en, color='k', alpha=0.3)
+plot.scatter(data_model_x[:1000], data_model_en[:1000], color='k', alpha=0.3)
 plot.xlabel('Cell location (cm)')
 plot.ylabel('Neutron energy (keV)')
 plot.show()
@@ -111,7 +132,7 @@ plot.show()
 
 # plot the TOF vs x location
 plot.figure(3)
-plot.scatter(data_model_en,modelTOFdata, color='k', alpha=0.3)
+plot.scatter(data_model_en[:2000],modelTOFdata[:2000], color='k', alpha=0.3)
 plot.xlabel('Neutron energy (keV)' )
 plot.ylabel('TOF (ns)')
 plot.show()
@@ -124,9 +145,46 @@ tofSatisfiedData = fakeDataSet[np.ix_(np.floor(fakeDataSet[:,3])==185.0,(0,1,2))
 print('number of events found {}'.format(len(tofSatisfiedData)))
 
 plot.figure(10)
-plot.scatter(tofSatisfiedData[:,0],tofSatisfiedData[:,1],color='red',
+plot.scatter(tofSatisfiedData[:500,0],tofSatisfiedData[:500,1],color='red',
              alpha=0.5, zorder=10)
-plot.scatter(data_model_x, data_model_ed, color='k', alpha=0.2,zorder=1)
+plot.scatter(data_model_x[:5000], data_model_ed[:5000], color='k', alpha=0.2,zorder=1)
 plot.ylabel('Deuteron energy (keV)')
 plot.xlabel('Location in cell (cm)')
 plot.show()
+
+histTOFdata, tof_bin_edges = np.histogram(fakeDataSet[:,3], 25, (175.0,200.0),
+                                          density=True)
+plot.figure(20)
+plot.scatter(tof_bin_edges[:-1], histTOFdata, color='k')
+plot.xlabel('TOF (ns)')
+plot.ylabel('Counts')
+plot.show()
+
+plot.figure(21)
+plot.scatter(tof_bin_edges[:-1],np.log(histTOFdata), color='k')
+plot.xlabel('TOF (ns)')
+plot.ylabel('log PDF')
+plot.show()
+
+
+# make some small "observed" fake data
+nObsTestEvents = 50
+fakeObsData = generateModelData([mp_initialEnergy_t,mp_loss0_t,mp_sigma_t],
+                                nObsTestEvents)
+fakeObsBadData = generateModelData([mp_initialEnergy_t,mp_loss0_t,
+                                    mp_sigma_t*0.6],nObsTestEvents)
+
+# make our vector of 'n'
+observedVectorN, observed_bin_edges = np.histogram(fakeObsData[:,3], 25,
+                                                   (175.0,200.0))
+observedVectorNbad, observed_bin_edges_bad = np.histogram(fakeObsBadData[:,3],
+                                                          25,
+                                                   (175.0,200.0))
+
+loghist = np.log(histTOFdata)
+loghist[loghist==-inf] = 0
+
+testLogLike = np.dot(observedVectorN, loghist)
+testLogLikeBad = np.dot(observedVectorNbad, loghist)
+print('test loglikelihood value {}, and for off-observables {}'.format(
+      testLogLike, testLogLikeBad))

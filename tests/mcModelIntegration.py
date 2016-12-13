@@ -76,19 +76,46 @@ def generateModelData(params, nSamples):
     params is an array of the parameters, [e0, e1, sigma]
     Returns a tuple of len(nSamples), [x, ed, en, tof]
     """
+    initialEnergy, eLoss, sigma = params
     data_x=np.random.uniform(low=0.0, high=distance_cellLength, size=nSamples)
-    data_ed= np.random.normal(loc=params[0] + params[1]*data_x, 
-                              scale=params[2])
+    data_ed= np.random.normal(loc=initialEnergy + eLoss*data_x, 
+                              scale=sigma)
     data_en = getDDneutronEnergy(data_ed)
     
     neutronDistance = distance_cellToZero + (distance_cellLength - data_x)
     neutronTOF = getTOF(mass_neutron, data_en, neutronDistance)
-    effectiveDenergy = (params[0] + data_ed)/2
+    effectiveDenergy = (initialEnergy + data_ed)/2
     deuteronTOF = getTOF( mass_deuteron, effectiveDenergy, data_x )
     data_tof = neutronTOF + deuteronTOF
     
     data = np.column_stack((data_x,data_ed,data_en,data_tof))
     return data
+    
+def lnlike(params, observables, nDraws=2000000):
+    """Evaluate the log likelihood given a set of params and observables
+    Observables is a vector; a histogrammed time distribution
+    Params is a list of [initial D energy, E_D loss, sigma]
+    nDraws is the number of points drawn from (energy,location) distribution\
+    which are used to produce the PDF evaluations at different TOFs
+    """
+    #print('checking type ({}) and length ({}) of params in lnlikefxn'.format(type(params),len(params)))
+    evalData=generateModelData(params, nDraws)
+    evalHist, evalBinEdges = np.histogram(evalData[:,3], 25, (175.0,200.0),
+                                          density=True)
+    logEvalHist = np.log(evalHist)
+    #print(logEvalHist)
+    # find what TOFs have zero observed data
+    # we'll use this to handle cases where we might wind up with -inf*0
+    # likelihood is fine if PDF is 0 somewhere where no data is found
+    # without checks though, ln(PDF=0)=-inf, -inf*0 = nan
+    # however, if PDF is 0 (lnPDF=-inf) where there IS data, lnL should be -inf
+    zeroObservedIndices = np.where(observables == 0)[0]
+    for idx in zeroObservedIndices:
+        if logEvalHist[idx] == -inf:
+            logEvalHist[zeroObservedIndices] = 0
+    
+    loglike = np.dot(logEvalHist,observables)
+    return loglike
     
     
 # mp_* are model parameters
@@ -168,23 +195,77 @@ plot.show()
 
 
 # make some small "observed" fake data
-nObsTestEvents = 50
+nObsTestEvents = 5000
 fakeObsData = generateModelData([mp_initialEnergy_t,mp_loss0_t,mp_sigma_t],
                                 nObsTestEvents)
-fakeObsBadData = generateModelData([mp_initialEnergy_t,mp_loss0_t,
-                                    mp_sigma_t*0.6],nObsTestEvents)
+
 
 # make our vector of 'n'
 observedVectorN, observed_bin_edges = np.histogram(fakeObsData[:,3], 25,
                                                    (175.0,200.0))
-observedVectorNbad, observed_bin_edges_bad = np.histogram(fakeObsBadData[:,3],
-                                                          25,
-                                                   (175.0,200.0))
+
 
 loghist = np.log(histTOFdata)
-loghist[loghist==-inf] = 0
+zeroIndices = np.where(observedVectorN==0)[0]
+for idx in zeroIndices:
+    if loghist[idx] == -inf:
+        loghist[idx] = 0
 
-testLogLike = np.dot(observedVectorN, loghist)
-testLogLikeBad = np.dot(observedVectorNbad, loghist)
+manualLogLike = np.dot(loghist,observedVectorN)
+print('manually computed loglike {}'.format(manualLogLike))
+
+testLogLike = lnlike([mp_initialEnergy_t,mp_loss0_t,mp_sigma_t], 
+                     observedVectorN)
+testLogLikeBad = lnlike([mp_initialEnergy_t,mp_loss0_t,mp_sigma_t*0.8],
+                        observedVectorN)
 print('test loglikelihood value {}, and for off-observables {}'.format(
       testLogLike, testLogLikeBad))
+
+# we're used to seeing NLLs, not the .. non-negative version
+nll = lambda *args: -lnlike(*args)
+
+testnll = nll([mp_initialEnergy_t,mp_loss0_t,mp_sigma_t], 
+                     observedVectorN)
+testnllbad = nll([mp_initialEnergy_t,mp_loss0_t,mp_sigma_t*0.8],
+                        observedVectorN)
+print('test NLL value {}, and for off-observables {}'.format(
+      testnll, testnllbad))
+
+
+# scan over a range of values for parameters
+multiplier = np.linspace(0.5,1.5,20)
+sigmaVals = mp_sigma_t*multiplier
+initialVals = mp_initialEnergy_t * multiplier
+lossVals = mp_loss0_t * multiplier
+nll_sigmas =[]
+nll_initials=[]
+nll_losses=[]
+print('scanning sigmas..')
+for sig in sigmaVals:
+    nll_sigmas.append(nll([mp_initialEnergy_t, mp_loss0_t, sig],
+                 observedVectorN))
+print('scanning initial energies..')
+for initial in initialVals:
+    nll_initials.append( nll([initial, mp_loss0_t, mp_sigma_t],
+                  observedVectorN))
+print('scanning losses...')
+for loss in lossVals:
+    nll_losses.append( nll([mp_initialEnergy_t, loss, mp_sigma_t],
+               observedVectorN))
+
+plot.figure()
+plot.subplot(221)
+plot.hist(fakeObsData[:,3], 25, (175.0,200.0))
+plot.subplot(223)
+plot.scatter(multiplier,nll_sigmas)
+plot.xlabel('fraction sigma TRUE')
+plot.ylabel('nll')
+plot.subplot(222)
+plot.scatter(multiplier,nll_initials)
+plot.xlabel('fraction of TRUE initial energy')
+plot.ylabel('NLL')
+plot.subplot(224)
+plot.scatter(multiplier, nll_losses)
+plot.xlabel('fraction of TRUE energy loss parameter')
+plot.ylabel('NLL')
+plot.show()

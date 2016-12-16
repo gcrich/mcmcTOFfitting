@@ -58,8 +58,8 @@ tof_range = (tof_minRange,tof_maxRange)
 
 
 # PARAMETER BOUNDARIES
-min_e0, max_e0 = 900,1100
-min_e1,max_e1= -100, 0
+min_e0, max_e0 = 800,1100
+min_e1,max_e1= -150, 0
 min_e2,max_e2 = -30, 0
 min_e3,max_e3 = -10, 0
 min_sigma,max_sigma = 40, 100
@@ -144,8 +144,8 @@ def lnlike(params, observables, nDraws=1000000):
 
 def lnprior(theta):
     e_0, e_1, e_2, e_3, sigma = theta
-    if 900 < e_0 < 1100 and -100 <e_1<0 and -30 < e_2 < 0 \
-    and -10 < e_3 < 0 and 40 < sigma < 100:
+    if min_e0 < e_0 < max_e0 and min_e1 <e_1< max_e1 and min_e2 < e_2<max_e2 \
+    and min_e3 < e_3 < max_e3 and min_sigma < sigma < max_sigma:
         return 0
     return -inf
     
@@ -181,8 +181,8 @@ def readMultiStandoffTOFdata(filename):
 # mp_* are model parameters
 # *_t are 'true' values that go into our fake data
 # *_guess are guesses to start with
-mp_e0_guess = 1050 # initial deuteron energy, in keV
-mp_e1_guess = -80 # energy loss, 0th order approx, in keV/cm
+mp_e0_guess = 950 # initial deuteron energy, in keV
+mp_e1_guess = -100 # energy loss, 0th order approx, in keV/cm
 mp_e2_guess = -10
 mp_e3_guess = -5
 mp_sigma_guess = 80 # width of deuteron energy spread, fixed for now, in keV
@@ -284,9 +284,10 @@ sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob,
 
 #sampler.run_mcmc(p0, 500)
 # run with progress updates..
-for i, samplerResult in enumerate(sampler.sample(p0, iterations=500)):
-    if (i+1)%10 == 0:
-        print("{0:5.1%}".format(float(i)/500))
+mcIterations = 5000
+for i, samplerResult in enumerate(sampler.sample(p0, iterations=mcIterations)):
+    if (i+1)%100 == 0:
+        print("{0:5.1%}".format(float(i)/mcIterations))
 
 plot.figure()
 plot.subplot(511)
@@ -310,7 +311,7 @@ plot.xlabel('Step')
 plot.show()
 
 
-samples = sampler.chain[:,200:,:].reshape((-1,nDim))
+samples = sampler.chain[:,2000:,:].reshape((-1,nDim))
 import corner as corn
 cornerFig = corn.corner(samples,labels=["$E_0$","$E_1$","$E_2$","$E_3$",
                                         "$\sigma$"],

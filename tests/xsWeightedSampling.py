@@ -242,7 +242,13 @@ def lnprob(theta, observables):
     return prior + lnlike(theta, observables)
    
     
-
+def getDenergyAtLocation(params, cellLocation):
+    """Get the deuteron energy at a cell location, given model params"""
+    e0, e1, e2, e3, sigma = params
+    meanEnergy = e0 + e1*cellLocation + \
+                              e2*np.power(cellLocation,2) + \
+                              e3 * np.power(cellLocation,3)
+    return meanEnergy
     
     
 # mp_* are model parameters
@@ -258,7 +264,7 @@ mp_sigma_guess = 80 # width of deuteron energy spread, fixed for now, in keV
 
 
 # generate fake data
-nSamples = 10000
+nSamples = 100000
 fakeData = generateModelData([mp_e0_guess,mp_e1_guess,mp_e2_guess, 
                               mp_e3_guess, mp_sigma_guess], 
                               distance_standoffMid, nSamples)
@@ -268,9 +274,9 @@ fakeData = generateModelData([mp_e0_guess,mp_e1_guess,mp_e2_guess,
 # plot the fake data...
 # but only 2000 points, no need to do more
 plot.figure()
-plot.scatter(fakeData[:2000,0], fakeData[:2000,2], color='k', alpha=0.3)
+plot.scatter(fakeData[:2000,0], fakeData[:2000,1], color='k', alpha=0.3)
 plot.xlabel('Cell location (cm)')
-plot.ylabel('Neutron energy (keV)')
+plot.ylabel('Deuteron energy (keV)')
 plot.show()
 
 
@@ -288,14 +294,42 @@ plot.xlabel('Neutron energy (keV)' )
 plot.ylabel('TOF (ns)')
 plot.show()
 
-
+# make a plot that compares the spline to the data points from which
+# we form it
 ddnXS= ddnXSinterpolator()
+xsSplineRatio = ddnXS.evaluate(ddnXS.dEnergies) / ddnXS.ddnSigmaZero
 xpoints = np.linspace(20,10000,num=200)
 plot.figure()
+plot.subplot(211)
 plot.scatter(ddnXS.dEnergies, ddnXS.ddnSigmaZero)
 plot.plot(xpoints, ddnXS.evaluate(xpoints))
 plot.xlim(0,1200)
 plot.ylim(0, 24)
-plot.xlabel('Deuteron energy (keV)')
 plot.ylabel('D(D,n) cross section (mb)')
+plot.subplot(212)
+plot.scatter(ddnXS.dEnergies, xsSplineRatio)
+plot.xlim(0, 1200)
+plot.ylim(0.99,1.01)
+plot.xlabel('Deuteron energy (keV)')
+plot.show()
+
+nBins = 100
+uniformLengthSamples = np.random.uniform(0., distance_cellLength, nSamples)
+binSize = distance_cellLength / nBins
+binCenters, binSize = np.linspace(binSize/2, distance_cellLength - binSize/2, 
+                                  100, retstep =True)
+energySamples = getDenergyAtLocation([mp_e0_guess, mp_e1_guess, mp_e2_guess, 
+                                 mp_e3_guess, mp_sigma_guess], 
+                                 uniformLengthSamples)
+xsWeights = ddnXS.evaluate(energySamples)
+lengthSamplesHist, binEdges = np.histogram(uniformLengthSamples, 100,
+                                           (0., distance_cellLength), 
+                                           weights = xsWeights, 
+                                           density =True )
+integratedXSweightedPDF = np.sum(lengthSamplesHist*binSize)
+print('integral of the XS weighted PDF along length is {}'.format(
+      integratedXSweightedPDF))
+plot.figure()
+plot.scatter(binCenters, lengthSamplesHist*binSize)
+plot.ylim(0.006,0.014)
 plot.show()

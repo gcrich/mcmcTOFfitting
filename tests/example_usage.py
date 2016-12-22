@@ -8,4 +8,4 @@ print 'The speed of light is: {0}'.format(Physics.speedOfLight)
 print 'The mass of Deuteron is: {0}'.format(Masses.mass_deuteron)
 
 # You can acces your sub-namespaces as you would expect
-print 'Gravity on the moom is: {0}'.format(Physics.Moon.gravity)
+print 'Gravity on the moon is: {0}'.format(Physics.Moon.gravity)

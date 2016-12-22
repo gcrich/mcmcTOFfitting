@@ -24,6 +24,10 @@ tof_minRange = 180.0
 tof_maxRange = 205.0
 tof_range = (tof_minRange,tof_maxRange)
 
+eD_bins = 100
+eD_minRange = 500.0
+eD_maxRange = 1500.0
+eD_range = (eD_minRange, eD_maxRange)
 
 # PARAMETER BOUNDARIES
 min_e0, max_e0 = 900,1100
@@ -230,4 +234,14 @@ plot.show()
 meanEnergy = (mp_e0_guess + mp_e1_guess*uniformLengthSamples +
               mp_e2_guess*np.power(uniformLengthSamples,2) +
               mp_e3_guess * np.power(uniformLengthSamples,3))
-data_eD = np.random.normal(loc=meanEnergy, scale=sigma)
+data_eD = np.random.normal(loc=meanEnergy, scale=mp_sigma_guess)
+data_weights = ddnXS.evaluate(data_eD)
+hist2d, xedges, yedges = np.histogram2d( uniformLengthSamples, data_eD, [100,100],
+                         [[0.0,distances.tunlSSA_CsI.cellLength],
+                          [eD_minRange,eD_maxRange]], normed=True,
+                         weights=data_weights)
+plot.figure()
+plot.matshow(hist2d, origin='lower', interpolation='none')
+plot.xlabel('location in cell')
+plot.ylabel('deuteron energy')
+plot.show()

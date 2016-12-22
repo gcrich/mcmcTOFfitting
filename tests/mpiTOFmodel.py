@@ -190,9 +190,10 @@ if not processPool.is_master():
     processPool.wait()
     sys.exit(0)
 
-nDim, nWalkers = 3, 100
+nDim, nWalkers = 3, 50
 
 e0, e1, sigma = 1000, mp_e1_t * 1.2, mp_sigma_t * 0.7
+print("likelihood at initial guess {}".format(lnlike([e0,e1,sigma],observedTOF)))
 
 p0 = [[e0,e1,sigma] + 1e-2 * np.random.randn(nDim) for i in range(nWalkers)]
 sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
@@ -207,7 +208,7 @@ print('Running burn-in with {} steps...'.format(burninSteps))
 # run with progress updates..
 for i, samplerResult in enumerate(sampler.sample(p0, 
                                                  iterations=burninSteps-1)):
-    if (i+1)%1 == 0:
+    if (i+1)%2 == 0:
         print("{0:5.1%}".format(float(i)/burninSteps))
     position = samplerResult[0]
     #burninFile = open('/home/gcr/dev/tofFittingWork/burninChain.dat','a')

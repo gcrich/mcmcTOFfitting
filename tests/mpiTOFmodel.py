@@ -16,15 +16,16 @@
 #   based on http://dan.iel.fm/emcee/current/user/advanced/#using-mpi-to-distribute-the-computations
 #   use: mpirun -np 2 python mpi.py
 # for 'local' testing
-
+from __future__ import print_function
 import numpy as np
 from numpy import inf
 from scipy.integrate import quad
 import scipy.optimize as optimize
-import matplotlib.pyplot as plot
+#import matplotlib.pyplot as plot
 import emcee
 import sys
 from emcee.utils import MPIPool
+
 
 #
 # CONSTANTS
@@ -158,25 +159,25 @@ fakeData = generateModelData([mp_initialEnergy_t,mp_loss0_t,mp_sigma_t],
 
 
 # plot the fake data...
-plot.figure(1)
-plot.scatter(fakeData[:,0], fakeData[:,2], color='k', alpha=0.3)
-plot.xlabel('Cell location (cm)')
-plot.ylabel('Neutron energy (keV)')
-plot.show()
+#plot.figure(1)
+#plot.scatter(fakeData[:,0], fakeData[:,2], color='k', alpha=0.3)
+#plot.xlabel('Cell location (cm)')
+#plot.ylabel('Neutron energy (keV)')
+#plot.show()
 
 
 # plot the TOF 
-plot.figure(2)
-plot.hist(fakeData[:,3], bins=50)
-plot.xlabel('TOF (ns)')
-plot.show()
+#plot.figure(2)
+#plot.hist(fakeData[:,3], bins=50)
+#plot.xlabel('TOF (ns)')
+#plot.show()
 
 # plot the TOF vs x location
-plot.figure(3)
-plot.scatter(fakeData[:,2],fakeData[:,3], color='k', alpha=0.3)
-plot.xlabel('Neutron energy (keV)' )
-plot.ylabel('TOF (ns)')
-plot.show()
+#plot.figure(3)
+#plot.scatter(fakeData[:,2],fakeData[:,3], color='k', alpha=0.3)
+#plot.xlabel('Neutron energy (keV)' )
+#plot.ylabel('TOF (ns)')
+#plot.show()
 
 ##########################################
 # here's where things are going to get interesting...
@@ -192,13 +193,12 @@ nll = lambda *args: -lnlike(*args)
 
 observedTOF, observed_bin_edges = np.histogram(fakeData[:,3], 
                                                tof_nBins, tof_range)
+x0 = [1080, mp_loss0_t *1.2, mp_sigma_t * 1.05]
+#minimizedNLL = optimize.minimize(nll, x0, 
+#                                 args=observedTOF, method='Nelder-Mead',
+#                                 tol=1.0)
 
-minimizedNLL = optimize.minimize(nll, [1080,
-                                       mp_loss0_t *1.2,mp_sigma_t *1.05], 
-                                       args=observedTOF, method='Nelder-Mead',
-                                       tol=1.0)
-
-print(minimizedNLL)
+#print(minimizedNLL)
 
 # initialize the MPI pool
 processPool = MPIPool()
@@ -209,7 +209,7 @@ if not processPool.is_master():
 
 nDim, nWalkers = 3, 100
 
-e0, e1, sigma = minimizedNLL["x"]
+e0, e1, sigma = 1000, mp_loss0_t * 1.2, mp_sigma_t * 0.7
 
 p0 = [[e0,e1,sigma] + 1e-2 * np.random.randn(nDim) for i in range(nWalkers)]
 sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
@@ -226,19 +226,19 @@ for i, samplerResult in enumerate(sampler.sample(p0,
         print("{0:5.1%}".format(float(i)/burninSteps))
 samplerPos, samplerProb, samplerRstate = sampler.sample(p0, iterations=1)
 
-plot.figure()
-plot.subplot(311)
-plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
-plot.ylabel('Initial energy (keV)')
-plot.subplot(312)
-plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
-plot.ylabel('Energy loss (keV/cm)')
-plot.subplot(313)
-plot.plot(sampler.chain[:,:,2].T,'-',color='k',alpha=0.2)
-plot.ylabel('Sigma (keV)')
-plot.xlabel('Step')
+#plot.figure()
+#plot.subplot(311)
+#plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
+#plot.ylabel('Initial energy (keV)')
+#plot.subplot(312)
+#plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
+#plot.ylabel('Energy loss (keV/cm)')
+#plot.subplot(313)
+#plot.plot(sampler.chain[:,:,2].T,'-',color='k',alpha=0.2)
+#plot.ylabel('Sigma (keV)')
+#plot.xlabel('Step')
 #plot.show()
-plot.savefig('mpiBurninChain.png', dpi=300)
+#plot.savefig('mpiBurninChain.png', dpi=300)
 
 # here, we can reset the chain so that burn-in is clipped
 # we've already made pretty plots with the walkers converging 
@@ -256,25 +256,25 @@ for i, samplerResult in enumerate(sampler.sample(samplerPos,
 processPool.close()
         
 samples = sampler.chain[:,1000:,:].reshape((-1,nDim))
-plot.figure()
-plot.subplot(311)
-plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
-plot.ylabel('Initial energy (keV)')
-plot.subplot(312)
-plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
-plot.ylabel('Energy loss (keV/cm)')
-plot.subplot(313)
-plot.plot(sampler.chain[:,:,2].T,'-',color='k',alpha=0.2)
-plot.ylabel('Sigma (keV)')
-plot.xlabel('Step')
+#plot.figure()
+#plot.subplot(311)
+#plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
+#plot.ylabel('Initial energy (keV)')
+#plot.subplot(312)
+#plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
+#plot.ylabel('Energy loss (keV/cm)')
+#plot.subplot(313)
+#plot.plot(sampler.chain[:,:,2].T,'-',color='k',alpha=0.2)
+#plot.ylabel('Sigma (keV)')
+#plot.xlabel('Step')
 #plot.show()
-plot.savefig('mpiChain.png', dpi=300)
+#plot.savefig('mpiChain.png', dpi=300)
 
 
-import corner as corn
-cornerFig = corn.corner(samples,labels=["$E_0$","$E_1$","$\sigma$"],
-                        truths=[mp_initialEnergy_t, mp_loss0_t, mp_sigma_t],
-                        quantiles=[0.16,0.5,0.84], show_titles=True,
-                        title_kwargs={'fontsize': 12})
-cornerFig.savefig('mpiCorner.png', dpi=300)
+#import corner as corn
+#cornerFig = corn.corner(samples,labels=["$E_0$","$E_1$","$\sigma$"],
+#                        truths=[mp_initialEnergy_t, mp_loss0_t, mp_sigma_t],
+#                        quantiles=[0.16,0.5,0.84], show_titles=True,
+#                        title_kwargs={'fontsize': 12})
+#cornerFig.savefig('mpiCorner.png', dpi=300)
 

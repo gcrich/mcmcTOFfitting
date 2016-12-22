@@ -48,7 +48,7 @@ def getDDneutronEnergy(deuteronEnergy, labAngle = 0):
                    (masses.neutron + masses.he3) * \
                    np.cos(neutronAngle_radians)
     sVal = (deuteronEnergy *( masses.he3 - masses.deuteron) +
-            qValue_ddn * masses.he3) / (masses.neutron + masses.he3)
+            qValues.ddn * masses.he3) / (masses.neutron + masses.he3)
     sqrtNeutronEnergy = rVal + np.sqrt(np.power(rVal,2) + sVal)
     return np.power(sqrtNeutronEnergy, 2)
     

@@ -7,6 +7,13 @@ class Physics(object):
     """
     speedOfLight = 29.9792  # in cm/ns
 
+    # To create a "sub-namespace" you would just make a subclass
+    class Moon(object):
+        """
+        Constants related to physics on the Moon
+        """
+        gravity = 1.622  # m/s^2
+
 
 class Masses(object):
     """

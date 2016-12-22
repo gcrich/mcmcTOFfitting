@@ -14,7 +14,7 @@ import numpy as np
 from numpy import inf
 from scipy.integrate import quad
 import scipy.optimize as optimize
-import matplotlib.pyplot as plot
+#import matplotlib.pyplot as plot
 import emcee
 from constants.constants import (masses, qValues, distances, physics)
 
@@ -133,26 +133,26 @@ fakeData = generateModelData([mp_initialEnergy_t,mp_loss0_t,mp_sigma_t],
 
 
 
-# plot the fake data...
-plot.figure(1)
-plot.scatter(fakeData[:,0], fakeData[:,2], color='k', alpha=0.3)
-plot.xlabel('Cell location (cm)')
-plot.ylabel('Neutron energy (keV)')
-plot.show()
-
-
-# plot the TOF 
-plot.figure(2)
-plot.hist(fakeData[:,3], bins=50)
-plot.xlabel('TOF (ns)')
-plot.show()
-
-# plot the TOF vs x location
-plot.figure(3)
-plot.scatter(fakeData[:,2],fakeData[:,3], color='k', alpha=0.3)
-plot.xlabel('Neutron energy (keV)' )
-plot.ylabel('TOF (ns)')
-plot.show()
+## plot the fake data...
+#plot.figure(1)
+#plot.scatter(fakeData[:,0], fakeData[:,2], color='k', alpha=0.3)
+#plot.xlabel('Cell location (cm)')
+#plot.ylabel('Neutron energy (keV)')
+#plot.show()
+#
+#
+## plot the TOF 
+#plot.figure(2)
+#plot.hist(fakeData[:,3], bins=50)
+#plot.xlabel('TOF (ns)')
+#plot.show()
+#
+## plot the TOF vs x location
+#plot.figure(3)
+#plot.scatter(fakeData[:,2],fakeData[:,3], color='k', alpha=0.3)
+#plot.xlabel('Neutron energy (keV)' )
+#plot.ylabel('TOF (ns)')
+#plot.show()
 
 ##########################################
 # here's where things are going to get interesting...
@@ -192,23 +192,38 @@ for i, samplerResult in enumerate(sampler.sample(p0, iterations=500)):
     if (i+1)%10 == 0:
         print("{0:5.1%}".format(float(i)/500))
 
-plot.figure()
-plot.subplot(311)
-plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
-plot.ylabel('Initial energy (keV)')
-plot.subplot(312)
-plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
-plot.ylabel('Energy loss (keV/cm)')
-plot.subplot(313)
-plot.plot(sampler.chain[:,:,2].T,'-',color='k',alpha=0.2)
-plot.ylabel('Sigma (keV)')
-plot.xlabel('Step')
-plot.show()
+samples = sampler.chain[:,300:,].reshape((-1,nDim))
+# Compute the quantiles.
+# this comes from https://github.com/dfm/emcee/blob/master/examples/line.py
+e0_mcmc, e1_mcmc, sigma_mcmc = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]),
+                             zip(*np.percentile(samples, [16, 50, 84],
+                                                axis=0)))
+print("""MCMC result:
+    E0 = {0[0]} +{0[1]} -{0[2]} (truth: {1})
+    E1 = {2[0]} +{2[1]} -{2[2]} (truth: {3})
+    sigma = {4[0]} +{4[1]} -{4[2]} (truth: {5})
+    """.format(e0_mcmc, mp_initialEnergy_t, e1_mcmc, mp_loss0_t,
+               sigma_mcmc, mp_sigma_t))
+        
+        
+        
+#plot.figure()
+#plot.subplot(311)
+#plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
+#plot.ylabel('Initial energy (keV)')
+#plot.subplot(312)
+#plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
+#plot.ylabel('Energy loss (keV/cm)')
+#plot.subplot(313)
+#plot.plot(sampler.chain[:,:,2].T,'-',color='k',alpha=0.2)
+#plot.ylabel('Sigma (keV)')
+#plot.xlabel('Step')
+#plot.show()
 
 
-samples = sampler.chain[:,200:,:].reshape((-1,nDim))
-import corner as corn
-cornerFig = corn.corner(samples,labels=["$E_0$","$E_1$","$\sigma$"],
-                        truths=[mp_initialEnergy_t, mp_loss0_t, mp_sigma_t],
-                        quantiles=[0.16,0.5,0.84], show_titles=True,
-                        title_kwargs={'fontsize': 12})
+#samples = sampler.chain[:,200:,:].reshape((-1,nDim))
+#import corner as corn
+#cornerFig = corn.corner(samples,labels=["$E_0$","$E_1$","$\sigma$"],
+#                        truths=[mp_initialEnergy_t, mp_loss0_t, mp_sigma_t],
+#                        quantiles=[0.16,0.5,0.84], show_titles=True,
+#                        title_kwargs={'fontsize': 12})

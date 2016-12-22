@@ -1,11 +1,8 @@
 # They are imported into other modules like so...
-from constants.tof_constants import (Distances, Energy, Physics, Masses)
+from constants.constants import (distances, qValues, physics, masses)
 
 # Then you access them within their namespaces like so...
-print 'Cell length is: {0}'.format(Distances.distance_cellLength)
-print 'The Q value of a DDN reaction is: {0}'.format(Energy.qValue_ddn)
-print 'The speed of light is: {0}'.format(Physics.speedOfLight)
-print 'The mass of Deuteron is: {0}'.format(Masses.mass_deuteron)
-
-# You can acces your sub-namespaces as you would expect
-print 'Gravity on the moon is: {0}'.format(Physics.Moon.gravity)
+print('Cell length is: {0}'.format(distances.tunlSSA_CsI.cellLength))
+print('The Q value of a DDN reaction is: {0}'.format(qValues.ddn))
+print('The speed of light is: {0}'.format(physics.speedOfLight))
+print('The mass of Deuteron is: {0}'.format(masses.deuteron))

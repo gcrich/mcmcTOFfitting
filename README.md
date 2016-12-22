@@ -8,3 +8,4 @@ The particular experiment used a deuterium gas cell with a relatively low-energy
 
 An effort will be made to have this project somewhat interpretable by others and perhaps suitable as a template for carrying out similar analyses in different experimental configurations.
 
+In the absence of time to spend making this nicely packaged, it will for the time being rely on having its base directory included in PYTHONPATH.

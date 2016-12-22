@@ -41,9 +41,9 @@ class distances(object):
         delta1 = 131.09 # cm, difference between close and mid 0degree loc.
         delta2 = 52.39 # cm, difference between mid and far 0deg loc
 
-        standoffClose = distance_tipToColli + distance_colliToZero
-        standoffMid = distance_standoffClose + distance_delta1
-        standoffFar = distance_standoffMid + distance_delta2
+        standoffClose = tipToColli + colliToZero
+        standoffMid = standoffClose + delta1
+        standoffFar = standoffMid + delta2
 
 
 class qValues(object):

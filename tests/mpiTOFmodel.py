@@ -25,9 +25,7 @@ import scipy.optimize as optimize
 import emcee
 import sys
 from emcee.utils import MPIPool
-import constants.constants.distances.tunlSSA_CsI as distances
-import constants.constants.physics
-from constants.constants import (masses, qValues)
+from constants.constants import (masses, qValues, physics, distances)
 
 
 
@@ -60,7 +58,7 @@ def getTOF(mass, energy, distance):
     and the distance traveled (in cm).
     Though simple enough to write inline, this will be used often.
     """
-    velocity = speedOfLight * np.sqrt(2 * energy / mass)
+    velocity = physics.speedOfLight * np.sqrt(2 * energy / mass)
     tof = distance / velocity
     return tof
     
@@ -71,12 +69,12 @@ def generateModelData(params, nSamples):
     Returns a tuple of len(nSamples), [x, ed, en, tof]
     """
     initialEnergy, eLoss, sigma = params
-    data_x=np.random.uniform(low=0.0, high=distances.cellLength, size=nSamples)
+    data_x=np.random.uniform(low=0.0, high=distances.tunlSSA_CsI.cellLength, size=nSamples)
     data_ed= np.random.normal(loc=initialEnergy + eLoss*data_x, 
                               scale=sigma)
     data_en = getDDneutronEnergy(data_ed)
     
-    neutronDistance = distances.cellToZero + (distances.cellLength - data_x)
+    neutronDistance = distances.tunlSSA_CsI.cellToZero + (distances.tunlSSA_CsI.cellLength - data_x)
     neutronTOF = getTOF(masses.neutron, data_en, neutronDistance)
     effectiveDenergy = (initialEnergy + data_ed)/2
     deuteronTOF = getTOF( masses.deuteron, effectiveDenergy, data_x )

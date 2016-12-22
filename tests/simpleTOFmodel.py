@@ -16,25 +16,9 @@ from scipy.integrate import quad
 import scipy.optimize as optimize
 import matplotlib.pyplot as plot
 import emcee
-
-#
-# CONSTANTS
-#
-# these are perhaps presently not included in a very pythonic way
-# but to get going, here we are..
-#
-speedOfLight = 29.9792 # in cm/ns
-mass_deuteron = 1.8756e+06 # keV /c^2
-mass_neutron = 939565.0 # keV/c^2
-mass_he3 = 2.809414e6 # keV/c^2
-
-# Q value of DDN reaction, in keV
-qValue_ddn = 3268.914
+from constants.constants import (masses, qValues, distances, physics)
 
 
-distance_cellToZero = 518.055 # cm, distance from tip of gas cell to 0deg face
-distance_cellLength = 2.86 # cm, length of gas cell
-distance_zeroDegLength = 3.81 # cm, length of 0deg detector
 
 ##############
 # vars for binning of TOF 
@@ -51,11 +35,11 @@ def getDDneutronEnergy(deuteronEnergy, labAngle = 0):
     Returns neutron energy in keV
     """     
     neutronAngle_radians = labAngle * np.pi / 180
-    rVal = np.sqrt(mass_deuteron * mass_neutron*deuteronEnergy) / \
-                   (mass_neutron + mass_he3) * \
+    rVal = np.sqrt(masses.deuteron * masses.neutron*deuteronEnergy) / \
+                   (masses.neutron + masses.he3) * \
                    np.cos(neutronAngle_radians)
-    sVal = (deuteronEnergy *( mass_he3 - mass_deuteron) +
-            qValue_ddn * mass_he3) / (mass_neutron + mass_he3)
+    sVal = (deuteronEnergy *( masses.he3 - masses.deuteron) +
+            qValues.ddn * masses.he3) / (masses.neutron + masses.he3)
     sqrtNeutronEnergy = rVal + np.sqrt(np.power(rVal,2) + sVal)
     return np.power(sqrtNeutronEnergy, 2)
     
@@ -65,7 +49,7 @@ def getTOF(mass, energy, distance):
     and the distance traveled (in cm).
     Though simple enough to write inline, this will be used often.
     """
-    velocity = speedOfLight * np.sqrt(2 * energy / mass)
+    velocity = physics.speedOfLight * np.sqrt(2 * energy / mass)
     tof = distance / velocity
     return tof
     
@@ -76,15 +60,16 @@ def generateModelData(params, nSamples):
     Returns a tuple of len(nSamples), [x, ed, en, tof]
     """
     initialEnergy, eLoss, sigma = params
-    data_x=np.random.uniform(low=0.0, high=distance_cellLength, size=nSamples)
+    data_x=np.random.uniform(low=0.0, high=distances.tunlSSA_CsI.cellLength, 
+                             size=nSamples)
     data_ed= np.random.normal(loc=initialEnergy + eLoss*data_x, 
                               scale=sigma)
     data_en = getDDneutronEnergy(data_ed)
     
-    neutronDistance = distance_cellToZero + (distance_cellLength - data_x)
-    neutronTOF = getTOF(mass_neutron, data_en, neutronDistance)
+    neutronDistance = distances.tunlSSA_CsI.cellToZero + (distances.tunlSSA_CsI.cellLength - data_x)
+    neutronTOF = getTOF(masses.neutron, data_en, neutronDistance)
     effectiveDenergy = (initialEnergy + data_ed)/2
-    deuteronTOF = getTOF( mass_deuteron, effectiveDenergy, data_x )
+    deuteronTOF = getTOF( masses.deuteron, effectiveDenergy, data_x )
     data_tof = neutronTOF + deuteronTOF
     
     data = np.column_stack((data_x,data_ed,data_en,data_tof))

@@ -25,26 +25,11 @@ import scipy.optimize as optimize
 import emcee
 import sys
 from emcee.utils import MPIPool
+import constants.constants.distances.tunlSSA_CsI as distances
+import constants.constants.physics
+from constants.constants import (masses, qValues)
 
 
-#
-# CONSTANTS
-#
-# these are perhaps presently not included in a very pythonic way
-# but to get going, here we are..
-#
-speedOfLight = 29.9792 # in cm/ns
-mass_deuteron = 1.8756e+06 # keV /c^2
-mass_neutron = 939565.0 # keV/c^2
-mass_he3 = 2.809414e6 # keV/c^2
-
-# Q value of DDN reaction, in keV
-qValue_ddn = 3268.914
-
-
-distance_cellToZero = 518.055 # cm, distance from tip of gas cell to 0deg face
-distance_cellLength = 2.86 # cm, length of gas cell
-distance_zeroDegLength = 3.81 # cm, length of 0deg detector
 
 ##############
 # vars for binning of TOF 
@@ -61,11 +46,11 @@ def getDDneutronEnergy(deuteronEnergy, labAngle = 0):
     Returns neutron energy in keV
     """     
     neutronAngle_radians = labAngle * np.pi / 180
-    rVal = np.sqrt(mass_deuteron * mass_neutron*deuteronEnergy) / \
-                   (mass_neutron + mass_he3) * \
+    rVal = np.sqrt(masses.deuteron * masses.neutron*deuteronEnergy) / \
+                   (masses.neutron + masses.he3) * \
                    np.cos(neutronAngle_radians)
-    sVal = (deuteronEnergy *( mass_he3 - mass_deuteron) +
-            qValue_ddn * mass_he3) / (mass_neutron + mass_he3)
+    sVal = (deuteronEnergy *( masses.he3 - masses.deuteron) +
+            qValue_ddn * masses.he3) / (masses.neutron + masses.he3)
     sqrtNeutronEnergy = rVal + np.sqrt(np.power(rVal,2) + sVal)
     return np.power(sqrtNeutronEnergy, 2)
     
@@ -86,15 +71,15 @@ def generateModelData(params, nSamples):
     Returns a tuple of len(nSamples), [x, ed, en, tof]
     """
     initialEnergy, eLoss, sigma = params
-    data_x=np.random.uniform(low=0.0, high=distance_cellLength, size=nSamples)
+    data_x=np.random.uniform(low=0.0, high=distances.cellLength, size=nSamples)
     data_ed= np.random.normal(loc=initialEnergy + eLoss*data_x, 
                               scale=sigma)
     data_en = getDDneutronEnergy(data_ed)
     
-    neutronDistance = distance_cellToZero + (distance_cellLength - data_x)
-    neutronTOF = getTOF(mass_neutron, data_en, neutronDistance)
+    neutronDistance = distances.cellToZero + (distances.cellLength - data_x)
+    neutronTOF = getTOF(masses.neutron, data_en, neutronDistance)
     effectiveDenergy = (initialEnergy + data_ed)/2
-    deuteronTOF = getTOF( mass_deuteron, effectiveDenergy, data_x )
+    deuteronTOF = getTOF( masses.deuteron, effectiveDenergy, data_x )
     data_tof = neutronTOF + deuteronTOF
     
     data = np.column_stack((data_x,data_ed,data_en,data_tof))
@@ -146,14 +131,14 @@ def lnprob(theta, observables):
    
 # mp_* are model parameters
 # *_t are 'true' values that go into our fake data
-mp_initialEnergy_t = 1100 # initial deuteron energy, in keV
-mp_loss0_t = -100 # energy loss, 0th order approx, in keV/cm
+mp_e0_t = 1100 # initial deuteron energy, in keV
+mp_e1_t = -100 # energy loss, 0th order approx, in keV/cm
 mp_sigma_t = 50 # width of deuteron energy spread, fixed for now, in keV
 
 
 # generate fake data
 nSamples = 10000
-fakeData = generateModelData([mp_initialEnergy_t,mp_loss0_t,mp_sigma_t],
+fakeData = generateModelData([mp_e0_t,mp_e1_t,mp_sigma_t],
                              nSamples)
 
 
@@ -193,7 +178,7 @@ nll = lambda *args: -lnlike(*args)
 
 observedTOF, observed_bin_edges = np.histogram(fakeData[:,3], 
                                                tof_nBins, tof_range)
-x0 = [1080, mp_loss0_t *1.2, mp_sigma_t * 1.05]
+x0 = [1080, mp_e1_t *1.2, mp_sigma_t * 1.05]
 #minimizedNLL = optimize.minimize(nll, x0, 
 #                                 args=observedTOF, method='Nelder-Mead',
 #                                 tol=1.0)
@@ -209,7 +194,7 @@ if not processPool.is_master():
 
 nDim, nWalkers = 3, 100
 
-e0, e1, sigma = 1000, mp_loss0_t * 1.2, mp_sigma_t * 0.7
+e0, e1, sigma = 1000, mp_e1_t * 1.2, mp_sigma_t * 0.7
 
 p0 = [[e0,e1,sigma] + 1e-2 * np.random.randn(nDim) for i in range(nWalkers)]
 sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
@@ -255,7 +240,24 @@ for i, samplerResult in enumerate(sampler.sample(samplerPos,
 
 processPool.close()
         
-samples = sampler.chain[:,1000:,:].reshape((-1,nDim))
+samples = sampler.chain[:,:,:].reshape((-1,nDim))
+
+
+
+# Compute the quantiles.
+# this comes from https://github.com/dfm/emcee/blob/master/examples/line.py
+e0_mcmc, e1_mcmc, sigma_mcmc = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]),
+                             zip(*np.percentile(samples, [16, 50, 84],
+                                                axis=0)))
+print("""MCMC result:
+    E0 = {0[0]} +{0[1]} -{0[2]} (truth: {1})
+    E1 = {2[0]} +{2[1]} -{2[2]} (truth: {3})
+    sigma = {4[0]} +{4[1]} -{4[2]} (truth: {5})
+    """.format(e0_mcmc, mp_e0_true, e1_mcmc, mp_e1_true,
+               sigma_mcmc, mp_sigma_t))
+
+
+
 #plot.figure()
 #plot.subplot(311)
 #plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
@@ -273,7 +275,7 @@ samples = sampler.chain[:,1000:,:].reshape((-1,nDim))
 
 #import corner as corn
 #cornerFig = corn.corner(samples,labels=["$E_0$","$E_1$","$\sigma$"],
-#                        truths=[mp_initialEnergy_t, mp_loss0_t, mp_sigma_t],
+#                        truths=[mp_e0_t, mp_e1_t, mp_sigma_t],
 #                        quantiles=[0.16,0.5,0.84], show_titles=True,
 #                        title_kwargs={'fontsize': 12})
 #cornerFig.savefig('mpiCorner.png', dpi=300)

@@ -13,35 +13,9 @@ import scipy.optimize as optimize
 import matplotlib.pyplot as plot
 import emcee
 from scipy.interpolate import interp1d
+from constants.constants import (masses, qValues, distances, physics)
+from utilities.utilities import ddnXSinterpolator
 
-#
-# CONSTANTS
-#
-# these are perhaps presently not included in a very pythonic way
-# but to get going, here we are..
-#
-speedOfLight = 29.9792 # in cm/ns
-mass_deuteron = 1.8756e+06 # keV /c^2
-mass_neutron = 939565.0 # keV/c^2
-mass_he3 = 2.809414e6 # keV/c^2
-
-# Q value of DDN reaction, in keV
-qValue_ddn = 3268.914
-
-
-distance_cellToZero = 518.055 # cm, distance from tip of gas cell to 0deg face
-distance_cellLength = 2.86 # cm, length of gas cell
-distance_zeroDegLength = 3.81 # cm, length of 0deg detector
-distance_tipToColli = 148.4 # cm, distance from cell tip to collimator exit
-distance_colliToZero = 233.8 # cm, distance from collimator exit to face of
-# 0deg AT ITS CLOSEST LOCATION
-distance_delta1 = 131.09 # cm, difference between close and mid 0degree loc.
-distance_delta2 = 52.39 # cm, difference between mid and far 0deg loc
-
-# in function generateModelData the standoff distance has 0deg length / 2 added
-distance_standoffClose= distance_tipToColli + distance_colliToZero
-distance_standoffMid = distance_standoffClose + distance_delta1
-distance_standoffFar = distance_standoffMid + distance_delta2
 
 ##############
 # vars for binning of TOF 
@@ -59,91 +33,7 @@ min_e3,max_e3 = -10, 0
 min_sigma,max_sigma = 40, 100
 
 
-class ddnXSinterpolator:
-    """Class which handles spline interpolation of DDN cross section"""
 
-    def __init__(self):
-    # build the interpolation object
-# first have to populate the arrays of XS data
-        self.dEnergies = []
-        for e in range(20, 101, 10):
-            self.dEnergies.append( float(e) )
-        for e in range(150, 1001, 50):
-            self.dEnergies.append( float(e) )
-        for e in range(1100, 3001, 100):
-            self.dEnergies.append( float(e) )
-        for e in range(3500, 10001, 500):
-            self.dEnergies.append( float(e) )
-            
-        self.ddnSigmaZero = []
-        self.ddnSigmaZero.append( 0.025 )
-        self.ddnSigmaZero.append( 0.125 )
-        self.ddnSigmaZero.append( 0.31 )
-        self.ddnSigmaZero.append( 0.52 )
-        self.ddnSigmaZero.append( 0.78 )
-        self.ddnSigmaZero.append( 1.06 )
-        self.ddnSigmaZero.append( 1.35 )
-        self.ddnSigmaZero.append( 1.66 )
-        self.ddnSigmaZero.append( 2.00 )
-        self.ddnSigmaZero.append( 3.33 )
-        self.ddnSigmaZero.append( 4.6 )
-        self.ddnSigmaZero.append( 5.9 )
-        self.ddnSigmaZero.append( 7.1 )
-        self.ddnSigmaZero.append( 8.3 )
-        self.ddnSigmaZero.append( 9.4 )
-        self.ddnSigmaZero.append( 10.4 )
-        self.ddnSigmaZero.append( 11.4 )
-        self.ddnSigmaZero.append( 12.4 )
-        self.ddnSigmaZero.append( 13.4 )
-        self.ddnSigmaZero.append( 14.3 )
-        self.ddnSigmaZero.append( 15.1 )
-        self.ddnSigmaZero.append( 15.8 )
-        self.ddnSigmaZero.append( 16.5 )
-        self.ddnSigmaZero.append( 17.2 )
-        self.ddnSigmaZero.append( 17.8 )
-        self.ddnSigmaZero.append( 18.4 )
-        self.ddnSigmaZero.append( 19.0 )
-        self.ddnSigmaZero.append( 20.0 )
-        self.ddnSigmaZero.append( 21.0 )
-        self.ddnSigmaZero.append( 21.9 )
-        self.ddnSigmaZero.append( 22.7 )
-        self.ddnSigmaZero.append( 23.4 )
-        self.ddnSigmaZero.append( 24.0 )
-        self.ddnSigmaZero.append( 24.6 )
-        self.ddnSigmaZero.append( 25.2 )
-        self.ddnSigmaZero.append( 25.8 )
-        self.ddnSigmaZero.append( 26.4 )
-        self.ddnSigmaZero.append( 26.9 )
-        self.ddnSigmaZero.append( 27.5 )
-        self.ddnSigmaZero.append( 28.0 )
-        self.ddnSigmaZero.append( 28.4 )
-        self.ddnSigmaZero.append( 28.9 )
-        self.ddnSigmaZero.append( 29.3 )
-        self.ddnSigmaZero.append( 29.8 )
-        self.ddnSigmaZero.append( 30.3 )
-        self.ddnSigmaZero.append( 30.7 )
-        self.ddnSigmaZero.append( 31.2 )
-        self.ddnSigmaZero.append( 33.5 )
-        self.ddnSigmaZero.append( 35.7 )
-        self.ddnSigmaZero.append( 37.8 )
-        self.ddnSigmaZero.append( 40.0 )
-        self.ddnSigmaZero.append( 41.5 )
-        self.ddnSigmaZero.append( 42.9 )
-        self.ddnSigmaZero.append( 43.8 )
-        self.ddnSigmaZero.append( 44.6 )
-        self.ddnSigmaZero.append( 45.2 )
-        self.ddnSigmaZero.append( 45.7 )
-        self.ddnSigmaZero.append( 46.1 )
-        self.ddnSigmaZero.append( 46.4 )
-        self.ddnSigmaZero.append( 46.5 )
-        self.ddnSigmaZero.append( 46.5 )
-        
-        
-        self.ddnXSfunc = interp1d(self.dEnergies, self.ddnSigmaZero,
-                                  kind='cubic')
-    
-    def evaluate(self,deuteronEnergy):
-        return self.ddnXSfunc(deuteronEnergy)
     
 
 
@@ -154,11 +44,11 @@ def getDDneutronEnergy(deuteronEnergy, labAngle = 0):
     Returns neutron energy in keV
     """     
     neutronAngle_radians = labAngle * np.pi / 180
-    rVal = np.sqrt(mass_deuteron * mass_neutron*deuteronEnergy) / \
-                   (mass_neutron + mass_he3) * \
+    rVal = np.sqrt(masses.deuteron * masses.neutron*deuteronEnergy) / \
+                   (masses.neutron + masses.he3) * \
                    np.cos(neutronAngle_radians)
-    sVal = (deuteronEnergy *( mass_he3 - mass_deuteron) +
-            qValue_ddn * mass_he3) / (mass_neutron + mass_he3)
+    sVal = (deuteronEnergy *( masses.he3 - masses.deuteron) +
+            qValues.ddn * masses.he3) / (masses.neutron + masses.he3)
     sqrtNeutronEnergy = rVal + np.sqrt(np.power(rVal,2) + sVal)
     return np.power(sqrtNeutronEnergy, 2)
     
@@ -168,7 +58,7 @@ def getTOF(mass, energy, distance):
     and the distance traveled (in cm).
     Though simple enough to write inline, this will be used often.
     """
-    velocity = speedOfLight * np.sqrt(2 * energy / mass)
+    velocity = physics.speedOfLight * np.sqrt(2 * energy / mass)
     tof = distance / velocity
     return tof
     
@@ -180,17 +70,17 @@ def generateModelData(params, standoffDistance, nSamples):
     """
     initialEnergy, eLoss, e2, e3, sigma = params
     
-    data_x=np.random.uniform(low=0.0, high=distance_cellLength, size=nSamples)
+    data_x=np.random.uniform(low=0.0, high=distances.tunlSSA_CsI.cellLength, size=nSamples)
     meanEnergy = initialEnergy + eLoss*data_x + \
                               e2*np.power(data_x,2) + e3 * np.power(data_x,3)
     data_ed= np.random.normal(loc=meanEnergy, scale=sigma)
     data_en = getDDneutronEnergy(data_ed)
     
-    neutronDistance = standoffDistance + (distance_cellLength - data_x) + \
-                        distance_zeroDegLength/2
-    neutronTOF = getTOF(mass_neutron, data_en, neutronDistance)
+    neutronDistance = standoffDistance + (distances.tunlSSA_CsI.cellLength - data_x) + \
+                        distances.tunlSSA_CsI.zeroDegLength/2
+    neutronTOF = getTOF(masses.neutron, data_en, neutronDistance)
     effectiveDenergy = (initialEnergy + data_ed)/2
-    deuteronTOF = getTOF( mass_deuteron, effectiveDenergy, data_x )
+    deuteronTOF = getTOF( masses.deuteron, effectiveDenergy, data_x )
     data_tof = neutronTOF + deuteronTOF
     
     data = np.column_stack((data_x,data_ed,data_en,data_tof))
@@ -204,7 +94,7 @@ def lnlike(params, observables, nDraws=1000000):
     which are used to produce the PDF evaluations at different TOFs
     """
     #print('checking type ({}) and length ({}) of params in lnlikefxn'.format(type(params),len(params)))
-    evalData=generateModelData(params, distance_standoffMid, nDraws)
+    evalData=generateModelData(params, distances.tunlSSA_CsI.standoffMid, nDraws)
     evalHist, evalBinEdges = np.histogram(evalData[:,3], tof_nBins, tof_range,
                                           density=True)
     logEvalHist = np.log(evalHist)
@@ -267,13 +157,13 @@ mp_sigma_guess = 80 # width of deuteron energy spread, fixed for now, in keV
 nSamples = 100000
 fakeData = generateModelData([mp_e0_guess,mp_e1_guess,mp_e2_guess, 
                               mp_e3_guess, mp_sigma_guess], 
-                              distance_standoffMid, nSamples)
+                              distances.tunlSSA_CsI.standoffMid, nSamples)
 
 
 
 # plot the fake data...
 # but only 2000 points, no need to do more
-plot.figure()
+plot.figure(1)
 plot.scatter(fakeData[:2000,0], fakeData[:2000,1], color='k', alpha=0.3)
 plot.xlabel('Cell location (cm)')
 plot.ylabel('Deuteron energy (keV)')
@@ -281,14 +171,14 @@ plot.show()
 
 
 # plot the TOF 
-plot.figure()
+plot.figure(2)
 plot.hist(fakeData[:,3], 25, (180,205))
 plot.ylabel('counts')
 plot.show()
 
 # plot the TOF vs x location
 # again only plot 2000 points
-plot.figure()
+plot.figure(3)
 plot.scatter(fakeData[:2000,2],fakeData[:2000,3], color='k', alpha=0.3)
 plot.xlabel('Neutron energy (keV)' )
 plot.ylabel('TOF (ns)')
@@ -299,7 +189,7 @@ plot.show()
 ddnXS= ddnXSinterpolator()
 xsSplineRatio = ddnXS.evaluate(ddnXS.dEnergies) / ddnXS.ddnSigmaZero
 xpoints = np.linspace(20,10000,num=200)
-plot.figure()
+plot.figure(4)
 plot.subplot(211)
 plot.scatter(ddnXS.dEnergies, ddnXS.ddnSigmaZero)
 plot.plot(xpoints, ddnXS.evaluate(xpoints))
@@ -314,22 +204,30 @@ plot.xlabel('Deuteron energy (keV)')
 plot.show()
 
 nBins = 100
-uniformLengthSamples = np.random.uniform(0., distance_cellLength, nSamples)
-binSize = distance_cellLength / nBins
-binCenters, binSize = np.linspace(binSize/2, distance_cellLength - binSize/2, 
+uniformLengthSamples = np.random.uniform(0., distances.tunlSSA_CsI.cellLength, nSamples)
+binSize = distances.tunlSSA_CsI.cellLength / nBins
+binCenters, binSize = np.linspace(binSize/2, distances.tunlSSA_CsI.cellLength - binSize/2, 
                                   100, retstep =True)
 energySamples = getDenergyAtLocation([mp_e0_guess, mp_e1_guess, mp_e2_guess, 
                                  mp_e3_guess, mp_sigma_guess], 
                                  uniformLengthSamples)
 xsWeights = ddnXS.evaluate(energySamples)
 lengthSamplesHist, binEdges = np.histogram(uniformLengthSamples, 100,
-                                           (0., distance_cellLength), 
+                                           (0., distances.tunlSSA_CsI.cellLength), 
                                            weights = xsWeights, 
                                            density =True )
 integratedXSweightedPDF = np.sum(lengthSamplesHist*binSize)
 print('integral of the XS weighted PDF along length is {}'.format(
       integratedXSweightedPDF))
-plot.figure()
+plot.figure(5)
 plot.scatter(binCenters, lengthSamplesHist*binSize)
 plot.ylim(0.006,0.014)
 plot.show()
+
+# here, we'll test doing uniform sampling then actually generating the gaussian
+# spread around the mean
+# from THESE points, we'll do the weighting...
+meanEnergy = (mp_e0_guess + mp_e1_guess*uniformLengthSamples +
+              mp_e2_guess*np.power(uniformLengthSamples,2) +
+              mp_e3_guess * np.power(uniformLengthSamples,3))
+data_eD = np.random.normal(loc=meanEnergy, scale=sigma)

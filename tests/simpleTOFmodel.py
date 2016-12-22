@@ -177,10 +177,11 @@ observedTOF, observed_bin_edges = np.histogram(fakeData[:,3],
 #print(minimizedNLL)
 
 
-nDim, nWalkers = 3, 100
+nDim, nWalkers = 3, 50
 
 #e0, e1, sigma = minimizedNLL["x"]
-e0, e1, sigma = mp_initialEnergy_t * 0.8, mp_loss0_t*1.2, mp_sigma_t * 0.5
+e0, e1, sigma = mp_initialEnergy_t*1.01, mp_loss0_t*1.1, mp_sigma_t * 0.8
+print("lnlike at initial guess is {}".format(lnlike([e0,e1,sigma], observedTOF)))
 
 p0 = [[e0,e1,sigma] + 1e-2 * np.random.randn(nDim) for i in range(nWalkers)]
 sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
@@ -190,8 +191,9 @@ sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob,
 #sampler.run_mcmc(p0, 500)
 # run with progress updates..
 for i, samplerResult in enumerate(sampler.sample(p0, iterations=500)):
-    if (i+1)%10 == 0:
+    if (i+1)%2 == 0:
         print("{0:5.1%}".format(float(i)/500))
+
 
 samples = sampler.chain[:,300:,].reshape((-1,nDim))
 # Compute the quantiles.

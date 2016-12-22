@@ -11,11 +11,10 @@
 import numpy as np
 from numpy import inf
 from scipy.integrate import quad
+from scipy.interpolate import interp1d
 import scipy.optimize as optimize
 import csv as csvlib
-import constants.constants.distances.tunlSSA_CsI as distances
-import constants.constants.physics
-from constants.constants import (masses, qValues)
+from constants.constants import (masses, qValues, distances, physics)
 
 
 
@@ -58,7 +57,7 @@ def getTOF(mass, energy, distance):
     and the distance traveled (in cm).
     Though simple enough to write inline, this will be used often.
     """
-    velocity = speedOfLight * np.sqrt(2 * energy / mass)
+    velocity = physics.speedOfLight * np.sqrt(2 * energy / mass)
     tof = distance / velocity
     return tof
     
@@ -71,14 +70,14 @@ def generateModelData(params, standoffDistance, nSamples):
     """
     initialEnergy, eLoss, e2, e3, sigma = params
     
-    data_x=np.random.uniform(low=0.0, high=distance_cellLength, size=nSamples)
+    data_x=np.random.uniform(low=0.0, high=distances.tunlSSA_CsI.cellLength, size=nSamples)
     meanEnergy = initialEnergy + eLoss*data_x + \
                               e2*np.power(data_x,2) + e3 * np.power(data_x,3)
     data_ed= np.random.normal(loc=meanEnergy, scale=sigma)
     data_en = getDDneutronEnergy(data_ed)
     
-    neutronDistance = standoffDistance + (distance_cellLength - data_x) + \
-                        distance_zeroDegLength/2
+    neutronDistance = standoffDistance + (distances.tunlSSA_CsI.cellLength - data_x) + \
+                        distances.tunlSSA_CsI.zeroDegLength/2
     neutronTOF = getTOF(masses.neutron, data_en, neutronDistance)
     effectiveDenergy = (initialEnergy + data_ed)/2
     deuteronTOF = getTOF( masses.deuteron, effectiveDenergy, data_x )
@@ -95,7 +94,7 @@ def lnlike(params, observables, nDraws=1000000):
     nDraws is the number of points drawn from (energy,location) distribution\
     which are used to produce the PDF evaluations at different TOFs
     """
-    evalData=generateModelData(params, distance_standoffMid, nDraws)
+    evalData=generateModelData(params, distances.tunlSSA_CsI.standoffMid, nDraws)
     evalHist, evalBinEdges = np.histogram(evalData[:,3], tof_nBins, tof_range,
                                           density=True)
     logEvalHist = np.log(evalHist)
@@ -154,3 +153,90 @@ def readMultiStandoffTOFdata(filename):
                                     float(row['run2']), float(row['run3'])])
     tofData = np.column_stack((lowerBinEdges,tofCounts))
     return tofData
+
+
+class ddnXSinterpolator:
+    """Class which handles spline interpolation of DDN cross section"""
+    
+    def __init__(self):
+        # build the interpolation object
+        # first have to populate the arrays of XS data
+        self.dEnergies = []
+        for e in range(20, 101, 10):
+            self.dEnergies.append( float(e) )
+        for e in range(150, 1001, 50):
+            self.dEnergies.append( float(e) )
+        for e in range(1100, 3001, 100):
+            self.dEnergies.append( float(e) )
+        for e in range(3500, 10001, 500):
+            self.dEnergies.append( float(e) )
+        
+        self.ddnSigmaZero = []
+        self.ddnSigmaZero.append( 0.025 )
+        self.ddnSigmaZero.append( 0.125 )
+        self.ddnSigmaZero.append( 0.31 )
+        self.ddnSigmaZero.append( 0.52 )
+        self.ddnSigmaZero.append( 0.78 )
+        self.ddnSigmaZero.append( 1.06 )
+        self.ddnSigmaZero.append( 1.35 )
+        self.ddnSigmaZero.append( 1.66 )
+        self.ddnSigmaZero.append( 2.00 )
+        self.ddnSigmaZero.append( 3.33 )
+        self.ddnSigmaZero.append( 4.6 )
+        self.ddnSigmaZero.append( 5.9 )
+        self.ddnSigmaZero.append( 7.1 )
+        self.ddnSigmaZero.append( 8.3 )
+        self.ddnSigmaZero.append( 9.4 )
+        self.ddnSigmaZero.append( 10.4 )
+        self.ddnSigmaZero.append( 11.4 )
+        self.ddnSigmaZero.append( 12.4 )
+        self.ddnSigmaZero.append( 13.4 )
+        self.ddnSigmaZero.append( 14.3 )
+        self.ddnSigmaZero.append( 15.1 )
+        self.ddnSigmaZero.append( 15.8 )
+        self.ddnSigmaZero.append( 16.5 )
+        self.ddnSigmaZero.append( 17.2 )
+        self.ddnSigmaZero.append( 17.8 )
+        self.ddnSigmaZero.append( 18.4 )
+        self.ddnSigmaZero.append( 19.0 )
+        self.ddnSigmaZero.append( 20.0 )
+        self.ddnSigmaZero.append( 21.0 )
+        self.ddnSigmaZero.append( 21.9 )
+        self.ddnSigmaZero.append( 22.7 )
+        self.ddnSigmaZero.append( 23.4 )
+        self.ddnSigmaZero.append( 24.0 )
+        self.ddnSigmaZero.append( 24.6 )
+        self.ddnSigmaZero.append( 25.2 )
+        self.ddnSigmaZero.append( 25.8 )
+        self.ddnSigmaZero.append( 26.4 )
+        self.ddnSigmaZero.append( 26.9 )
+        self.ddnSigmaZero.append( 27.5 )
+        self.ddnSigmaZero.append( 28.0 )
+        self.ddnSigmaZero.append( 28.4 )
+        self.ddnSigmaZero.append( 28.9 )
+        self.ddnSigmaZero.append( 29.3 )
+        self.ddnSigmaZero.append( 29.8 )
+        self.ddnSigmaZero.append( 30.3 )
+        self.ddnSigmaZero.append( 30.7 )
+        self.ddnSigmaZero.append( 31.2 )
+        self.ddnSigmaZero.append( 33.5 )
+        self.ddnSigmaZero.append( 35.7 )
+        self.ddnSigmaZero.append( 37.8 )
+        self.ddnSigmaZero.append( 40.0 )
+        self.ddnSigmaZero.append( 41.5 )
+        self.ddnSigmaZero.append( 42.9 )
+        self.ddnSigmaZero.append( 43.8 )
+        self.ddnSigmaZero.append( 44.6 )
+        self.ddnSigmaZero.append( 45.2 )
+        self.ddnSigmaZero.append( 45.7 )
+        self.ddnSigmaZero.append( 46.1 )
+        self.ddnSigmaZero.append( 46.4 )
+        self.ddnSigmaZero.append( 46.5 )
+        self.ddnSigmaZero.append( 46.5 )
+        
+        
+        self.ddnXSfunc = interp1d(self.dEnergies, self.ddnSigmaZero,
+                                  kind='cubic')
+    
+    def evaluate(self,deuteronEnergy):
+        return self.ddnXSfunc(deuteronEnergy)

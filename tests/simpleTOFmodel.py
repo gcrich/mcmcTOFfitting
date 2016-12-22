@@ -169,17 +169,18 @@ nll = lambda *args: -lnlike(*args)
 observedTOF, observed_bin_edges = np.histogram(fakeData[:,3], 
                                                tof_nBins, tof_range)
 
-minimizedNLL = optimize.minimize(nll, [1080,
-                                       mp_loss0_t *1.2,mp_sigma_t *1.05], 
-                                       args=observedTOF, method='Nelder-Mead',
-                                       tol=1.0)
-
-print(minimizedNLL)
+#minimizedNLL = optimize.minimize(nll, [1080,
+#                                       mp_loss0_t *1.2,mp_sigma_t *1.05], 
+#                                       args=observedTOF, method='Nelder-Mead',
+#                                       tol=1.0)
+#
+#print(minimizedNLL)
 
 
 nDim, nWalkers = 3, 100
 
-e0, e1, sigma = minimizedNLL["x"]
+#e0, e1, sigma = minimizedNLL["x"]
+e0, e1, sigma = mp_initialEnergy_t * 0.8, mp_loss0_t*1.2, mp_sigma_t * 0.5
 
 p0 = [[e0,e1,sigma] + 1e-2 * np.random.randn(nDim) for i in range(nWalkers)]
 sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 

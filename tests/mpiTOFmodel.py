@@ -200,13 +200,20 @@ sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob,
                                 pool=processPool)
 
 #sampler.run_mcmc(p0, 500)
-burninSteps = 500
+burninSteps = 50
 print('Running burn-in with {} steps...'.format(burninSteps))
+#burninFile = open('/home/gcr/dev/tofFittingWork/burninChain.dat','w')
+#burninFile.close()
 # run with progress updates..
 for i, samplerResult in enumerate(sampler.sample(p0, 
                                                  iterations=burninSteps-1)):
-    if (i+1)%10 == 0:
+    if (i+1)%1 == 0:
         print("{0:5.1%}".format(float(i)/burninSteps))
+    position = samplerResult[0]
+    #burninFile = open('/home/gcr/dev/tofFittingWork/burninChain.dat','a')
+    #for entry in range(position.shape[0]):
+    #    burninFile.write('{0:4d} {1:s}\n'.format(entry,' '.join(position(entry)))
+    #burninFile.close()
 samplerPos, samplerProb, samplerRstate = sampler.sample(p0, iterations=1)
 
 #plot.figure()
@@ -228,12 +235,12 @@ samplerPos, samplerProb, samplerRstate = sampler.sample(p0, iterations=1)
 # or at least, plots showing whatever they've done in our attempted burn in
 sampler.reset()
 
-nSteps = 5000
+nSteps = 500
 print('running sampler with {} steps..'.format(nSteps))
 for i, samplerResult in enumerate(sampler.sample(samplerPos,
                                                  rstate0=samplerRstate,
                                                  iterations=nSteps)):
-    if (i+1)%100 == 0:
+    if (i+1)%2 == 0:
         print("{0:5.1%}".format(float(i)/nSteps))
 
 processPool.close()

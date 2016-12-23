@@ -192,7 +192,7 @@ if not processPool.is_master():
 
 nDim, nWalkers = 3, 50
 
-e0, e1, sigma = 1000, mp_e1_t * 1.2, mp_sigma_t * 0.7
+e0, e1, sigma = mp_e0_t*0.98, mp_e1_t * 1.1, mp_sigma_t * 0.9
 print("likelihood at initial guess {}".format(lnlike([e0,e1,sigma],observedTOF)))
 
 p0 = [[e0,e1,sigma] + 1e-2 * np.random.randn(nDim) for i in range(nWalkers)]

@@ -206,16 +206,19 @@ print('Running burn-in with {} steps...'.format(burninSteps))
 #burninFile = open('/home/gcr/dev/tofFittingWork/burninChain.dat','w')
 #burninFile.close()
 # run with progress updates..
+burninSamplePosResult, burninSamplerProbResult, burninSamplerRstate
 for i, samplerResult in enumerate(sampler.sample(p0, 
-                                                 iterations=burninSteps-1)):
-    if (i+1)%2 == 0:
-        print("{0:5.1%}".format(float(i)/burninSteps))
+                                                 iterations=burninSteps)):
+    if (i+1)%5 == 0:
+        print("{0:5.1%}, step {} out of {}".format(float(i)/burninSteps,
+                                                   i, burninSteps))
     position = samplerResult[0]
+    burninSamplePosResult, burninSamplerProbResult, burninSamplerRstate = samplerResult
     #burninFile = open('/home/gcr/dev/tofFittingWork/burninChain.dat','a')
     #for entry in range(position.shape[0]):
     #    burninFile.write('{0:4d} {1:s}\n'.format(entry,' '.join(position(entry)))
     #burninFile.close()
-samplerPos, samplerProb, samplerRstate = sampler.sample(p0, iterations=1)
+
 
 #plot.figure()
 #plot.subplot(311)
@@ -238,8 +241,8 @@ sampler.reset()
 
 nSteps = 500
 print('running sampler with {} steps..'.format(nSteps))
-for i, samplerResult in enumerate(sampler.sample(samplerPos,
-                                                 rstate0=samplerRstate,
+for i, samplerResult in enumerate(sampler.sample(burninSamplePosResult,
+                                                 rstate0=burninSamplerRstate,
                                                  iterations=nSteps)):
     if (i+1)%2 == 0:
         print("{0:5.1%}".format(float(i)/nSteps))

@@ -184,7 +184,7 @@ x0 = [1080, mp_e1_t *1.2, mp_sigma_t * 1.05]
 #print(minimizedNLL)
 
 # initialize the MPI pool
-processPool = MPIPool()
+processPool = MPIPool(debug=True)
 # if not the master, wait for instruction
 if not processPool.is_master():
     processPool.wait()

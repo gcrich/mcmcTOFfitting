@@ -204,7 +204,7 @@ sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob,
 burninSteps = 50
 print('Running burn-in with {} steps...'.format(burninSteps))
 
-burninPos, burninProb, burninState = sampler.run_mcmc( p0, iterations=burninSteps)
+burninPos, burninProb, burninState = sampler.run_mcmc( p0, burninSteps )
 
 
 

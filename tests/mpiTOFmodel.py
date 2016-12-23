@@ -250,7 +250,7 @@ print("""MCMC result:
     E0 = {0[0]} +{0[1]} -{0[2]} (truth: {1})
     E1 = {2[0]} +{2[1]} -{2[2]} (truth: {3})
     sigma = {4[0]} +{4[1]} -{4[2]} (truth: {5})
-    """.format(e0_mcmc, mp_e0_true, e1_mcmc, mp_e1_true,
+    """.format(e0_mcmc, mp_e0_t, e1_mcmc, mp_e1_t,
                sigma_mcmc, mp_sigma_t))
 
 

@@ -19,15 +19,30 @@ from utilities.utilities import ddnXSinterpolator
 
 ##############
 # vars for binning of TOF 
-tof_nBins = 25
-tof_minRange = 180.0
-tof_maxRange = 205.0
+tof_nBins = 60
+tof_minRange = 160.0
+tof_maxRange = 220.0
 tof_range = (tof_minRange,tof_maxRange)
 
-eD_bins = 100
-eD_minRange = 500.0
-eD_maxRange = 1500.0
+eD_bins = 150
+eD_minRange = 200.0
+eD_maxRange = 1700.0
 eD_range = (eD_minRange, eD_maxRange)
+eD_binSize = (eD_maxRange - eD_minRange)/eD_bins
+eD_binCenters = np.linspace(eD_minRange + eD_binSize/2,
+                            eD_maxRange - eD_binSize/2,
+                            eD_bins)
+
+
+x_bins = 100
+x_minRange = 0.0
+x_maxRange = distances.tunlSSA_CsI.cellLength
+x_range = (x_minRange,x_maxRange)
+x_binSize = (x_maxRange - x_minRange)/x_bins
+x_binCenters = np.linspace(x_minRange + x_binSize/2,
+                           x_maxRange - x_binSize/2,
+                           x_bins)
+
 
 # PARAMETER BOUNDARIES
 min_e0, max_e0 = 900,1100
@@ -37,7 +52,7 @@ min_e3,max_e3 = -10, 0
 min_sigma,max_sigma = 40, 100
 
 
-
+ddnXSinstance = ddnXSinterpolator()
     
 
 
@@ -55,6 +70,10 @@ def getDDneutronEnergy(deuteronEnergy, labAngle = 0):
             qValues.ddn * masses.he3) / (masses.neutron + masses.he3)
     sqrtNeutronEnergy = rVal + np.sqrt(np.power(rVal,2) + sVal)
     return np.power(sqrtNeutronEnergy, 2)
+
+
+eN_binCenters = getDDneutronEnergy( eD_binCenters )
+
     
 def getTOF(mass, energy, distance):
     """Compute time of flight, in nanoseconds, given\
@@ -89,7 +108,43 @@ def generateModelData(params, standoffDistance, nSamples):
     
     data = np.column_stack((data_x,data_ed,data_en,data_tof))
     return data
-    
+
+def generateModelData_XS(params, standoffDistance, ddnXSfxn, nSamples, getPDF=False):
+    """
+    Generate model data with cross-section weighting applied
+    ddnXSfxn is an instance of the ddnXSinterpolator class - 
+    probably more efficient to pass it in rather than reinitializing 
+    one each time
+    """
+    e0, e1, e2, e3, sigma = params
+    data_x=np.random.uniform(low=0.0, high=distances.tunlSSA_CsI.cellLength, size=nSamples)
+
+    meanEnergy = (e0 + e1*data_x + e2*np.power(data_x,2) +
+                  e3 * np.power(data_x,3))
+    data_eD = np.random.normal(loc=meanEnergy, scale=sigma)
+    data_weights = ddnXSfxn.evaluate(data_eD)
+    dataHist2d, xedges, yedges = np.histogram2d( data_x, data_eD,
+                                                [x_bins, eD_bins],
+                                                [[x_minRange,x_maxRange],[eD_minRange,eD_maxRange]],
+                                                normed=True,
+                                                weights=data_weights)
+    drawHist2d = (np.rint(dataHist2d * eD_binSize * x_binSize * nSamples)).astype(int)
+    tofs = []
+    tofWeights = []
+    for index, weight in np.ndenumerate( drawHist2d ):
+        cellLocation = x_binCenters[index[0]]
+        effectiveDenergy = (e0 + eD_binCenters[index[1]])/2
+        tof_d = getTOF( masses.deuteron, effectiveDenergy, cellLocation )
+        neutronDistance = (distances.tunlSSA_CsI.cellLength - cellLocation +
+                           distances.tunlSSA_CsI.zeroDegLength/2 +
+                           standoffDistance )
+        tof_n = getTOF(masses.neutron, eN_binCenters[index[1]], neutronDistance)
+        tofs.append( tof_d + tof_n )
+        tofWeights.append(weight)
+    tofData, tofBinEdges = np.histogram( tofs, bins=tof_nBins, range=tof_range,
+                           weights=tofWeights, density=getPDF)
+    return tofData
+
 def lnlike(params, observables, nDraws=1000000):
     """Evaluate the log likelihood given a set of params and observables
     Observables is a vector a histogrammed time distribution
@@ -115,7 +170,26 @@ def lnlike(params, observables, nDraws=1000000):
     
     loglike = np.dot(logEvalHist,observables)
     return loglike
+
+
+def lnlike_xs(params, observables, nDraws=1000000):
+    """
+    Evaluate the log likelihood using xs-weighting
+    """
+    e0, e1,e2,e3,sigma = params
+    print('likelihood called with params {},{},{},{},{}'.
+          format(e0,e1,e2,e3,sigma))
+    evalData = generateModelData_XS(params, distances.tunlSSA_CsI.standoffMid,
+                                    ddnXSinstance, nDraws, True)
+    logEvalHist = np.log(evalData)
+    zeroObservedIndices = np.where(observables == 0)[0]
+    for idx in zeroObservedIndices:
+        if logEvalHist[idx] == -inf:
+            logEvalHist[zeroObservedIndices] = 0
     
+    loglike = np.dot(logEvalHist,observables)
+    print('got liklihood {}'.format(loglike))
+    return loglike
     
 
 def lnprior(theta):
@@ -167,45 +241,45 @@ fakeData = generateModelData([mp_e0_guess,mp_e1_guess,mp_e2_guess,
 
 # plot the fake data...
 # but only 2000 points, no need to do more
-plot.figure(1)
-plot.scatter(fakeData[:2000,0], fakeData[:2000,1], color='k', alpha=0.3)
-plot.xlabel('Cell location (cm)')
-plot.ylabel('Deuteron energy (keV)')
-plot.show()
+#plot.figure(1)
+#plot.scatter(fakeData[:2000,0], fakeData[:2000,1], color='k', alpha=0.3)
+#plot.xlabel('Cell location (cm)')
+#plot.ylabel('Deuteron energy (keV)')
+#plot.show()
 
 
 # plot the TOF 
-plot.figure(2)
-plot.hist(fakeData[:,3], 25, (180,205))
-plot.ylabel('counts')
-plot.show()
+#plot.figure(2)
+#plot.hist(fakeData[:,3], 25, (180,205))
+#plot.ylabel('counts')
+#plot.show()
 
 # plot the TOF vs x location
 # again only plot 2000 points
-plot.figure(3)
-plot.scatter(fakeData[:2000,2],fakeData[:2000,3], color='k', alpha=0.3)
-plot.xlabel('Neutron energy (keV)' )
-plot.ylabel('TOF (ns)')
-plot.show()
+#plot.figure(3)
+#plot.scatter(fakeData[:2000,2],fakeData[:2000,3], color='k', alpha=0.3)
+#plot.xlabel('Neutron energy (keV)' )
+#plot.ylabel('TOF (ns)')
+#plot.show()
 
 # make a plot that compares the spline to the data points from which
 # we form it
 ddnXS= ddnXSinterpolator()
 xsSplineRatio = ddnXS.evaluate(ddnXS.dEnergies) / ddnXS.ddnSigmaZero
 xpoints = np.linspace(20,10000,num=200)
-plot.figure(4)
-plot.subplot(211)
-plot.scatter(ddnXS.dEnergies, ddnXS.ddnSigmaZero)
-plot.plot(xpoints, ddnXS.evaluate(xpoints))
-plot.xlim(0,1200)
-plot.ylim(0, 24)
-plot.ylabel('D(D,n) cross section (mb)')
-plot.subplot(212)
-plot.scatter(ddnXS.dEnergies, xsSplineRatio)
-plot.xlim(0, 1200)
-plot.ylim(0.99,1.01)
-plot.xlabel('Deuteron energy (keV)')
-plot.show()
+#plot.figure(4)
+#plot.subplot(211)
+#plot.scatter(ddnXS.dEnergies, ddnXS.ddnSigmaZero)
+#plot.plot(xpoints, ddnXS.evaluate(xpoints))
+#plot.xlim(0,1200)
+#plot.ylim(0, 24)
+#plot.ylabel('D(D,n) cross section (mb)')
+#plot.subplot(212)
+#plot.scatter(ddnXS.dEnergies, xsSplineRatio)
+#plot.xlim(0, 1200)
+#plot.ylim(0.99,1.01)
+#plot.xlabel('Deuteron energy (keV)')
+#plot.show()
 
 nBins = 100
 uniformLengthSamples = np.random.uniform(0., distances.tunlSSA_CsI.cellLength, nSamples)
@@ -223,10 +297,10 @@ lengthSamplesHist, binEdges = np.histogram(uniformLengthSamples, 100,
 integratedXSweightedPDF = np.sum(lengthSamplesHist*binSize)
 print('integral of the XS weighted PDF along length is {}'.format(
       integratedXSweightedPDF))
-plot.figure(5)
-plot.scatter(binCenters, lengthSamplesHist*binSize)
-plot.ylim(0.006,0.014)
-plot.show()
+#plot.figure(5)
+#plot.scatter(binCenters, lengthSamplesHist*binSize)
+#plot.ylim(0.006,0.014)
+#plot.show()
 
 # here, we'll test doing uniform sampling then actually generating the gaussian
 # spread around the mean
@@ -236,7 +310,7 @@ meanEnergy = (mp_e0_guess + mp_e1_guess*uniformLengthSamples +
               mp_e3_guess * np.power(uniformLengthSamples,3))
 data_eD = np.random.normal(loc=meanEnergy, scale=mp_sigma_guess)
 data_weights = ddnXS.evaluate(data_eD)
-hist2d, xedges, yedges = np.histogram2d( uniformLengthSamples, data_eD, [100,100],
+hist2d, xedges, yedges = np.histogram2d( uniformLengthSamples, data_eD, [100,eD_bins],
                          [[0.0,distances.tunlSSA_CsI.cellLength],
                           [eD_minRange,eD_maxRange]], normed=True,
                          weights=data_weights)
@@ -245,3 +319,76 @@ plot.matshow(hist2d, origin='lower', interpolation='none')
 plot.xlabel('location in cell')
 plot.ylabel('deuteron energy')
 plot.show()
+
+hist2d_binsize = (distances.tunlSSA_CsI.cellLength *
+                  (eD_maxRange-eD_minRange) / (eD_bins*100))
+hist2d_integral = np.sum(hist2d*hist2d_binsize)
+print('integral of 2d histogram {}'.format(hist2d_integral))
+print(hist2d.shape)
+projected = hist2d.sum(axis=1)
+projectedE = hist2d.sum(axis=0)
+print(projected.shape)
+#plot.figure()
+#plot.subplot(121)
+#plot.scatter(xedges[:-1], projected)
+#plot.subplot(122)
+#plot.scatter(yedges[:-1], projectedE)
+#plot.show()
+projectedBinsize = distances.tunlSSA_CsI.cellLength / 100
+summedProjection = np.sum(projected*hist2d_binsize)
+print('integrated projection along cell length {} (should be 1)'.
+      format(summedProjection))
+
+# so at this stage, the 2d hist is our PDF..
+# now we need to sample from it
+hist2d_draws = (np.rint(hist2d * hist2d_binsize * nSamples)).astype(int)
+print(type(hist2d_draws))
+print(hist2d_draws.shape)
+print(type(hist2d_draws[0,0]))
+effectiveDraws = hist2d_draws.sum()
+print('actual \'draws\' from the histogram {}'.format(effectiveDraws))
+
+# calculate the bin centers
+binSize_cellLoc = distances.tunlSSA_CsI.cellLength / nBins
+binCenters_cellLoc = np.linspace( binSize_cellLoc/2,
+                                 (distances.tunlSSA_CsI.cellLength -
+                                  binSize_cellLoc/2), nBins )
+binSize_eD = (eD_maxRange - eD_minRange) / eD_bins
+binCenters_eD = np.linspace( eD_minRange + binSize_eD/2,
+                            eD_maxRange - binSize_eD/2,
+                            eD_bins)
+binCenters_eN = getDDneutronEnergy( binCenters_eD ) # NOTE THAT THIS IS NOT NECESSARILY A LINEAR TRANSFORM
+# SO NOW OUR BINS MAY NOT BE OF EQUAL VOLUME.. or something.. need to think about it
+tofs = []
+tofWeights = []
+for index, weight in np.ndenumerate(hist2d_draws):
+# get the TOF for the deuteron to this location
+    cellLocation = binCenters_cellLoc[index[0]]
+    effectiveDenergy = (mp_e0_guess + binCenters_eD[index[1]]) / 2
+    tof_d = getTOF( masses.deuteron, effectiveDenergy, cellLocation)
+    neutronDistance = (distances.tunlSSA_CsI.standoffMid +
+                       distances.tunlSSA_CsI.cellLength - cellLocation +
+                       distances.tunlSSA_CsI.zeroDegLength/2)
+    tof_n = getTOF( masses.neutron, binCenters_eN[index[1]], neutronDistance)
+    tofs.append( tof_d + tof_n)
+    tofWeights.append( weight )
+#plot.figure()
+#plot.hist(tofs,weights=tofWeights, bins=tof_nBins, range=tof_range)
+#plot.show()
+
+
+fakeXSdata = generateModelData_XS( [mp_e0_guess, mp_e1_guess, mp_e2_guess,
+                                    mp_e3_guess, mp_sigma_guess],
+                                  distances.tunlSSA_CsI.standoffMid,
+                                  ddnXSinstance, 200000 )
+loglikeValue = lnlike_xs( [1080, mp_e1_guess*0.92, mp_e2_guess*1.12,
+                           mp_e3_guess*0.95, mp_sigma_guess*1.1], fakeXSdata )
+print('got likelihood value of: {}'.format(loglikeValue))
+
+nll = lambda *args: -lnlike_xs(*args)
+minimizedNLL = optimize.minimize(nll, [1080, mp_e1_guess*0.92, mp_e2_guess*1.12,
+                                       mp_e3_guess*0.8, mp_sigma_guess*1.2],
+                                       args=fakeXSdata, method='Nelder-Mead',
+                                       tol=1.0)
+
+print(minimizedNLL)

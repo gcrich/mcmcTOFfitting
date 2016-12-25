@@ -5,7 +5,7 @@
 #
 # tests for cross-section weighted sampling of the DDn production distribution
 #
-
+from __future__ import print_function
 import numpy as np
 from numpy import inf
 from scipy.integrate import quad

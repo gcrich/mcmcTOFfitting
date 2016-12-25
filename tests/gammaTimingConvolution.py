@@ -148,6 +148,6 @@ plot.figure()
 plot.scatter(observed_bin_edges[:-1], observedTOF,color='red')
 plot.scatter(observed_bin_edges[:-1], spreadData,color='green')
 plot.show()
-    
+
 
         

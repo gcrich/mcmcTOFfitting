@@ -7,19 +7,25 @@
 #
 # incorporates DDN cross-section weighting and beam-profile spreading
 #
+# NEW: reparametrized spread of deuteron energies to be in terms of
+#    percent of mean energy, also added linear increase in spread in terms of x
+#
 # TODO: add effective posterior predictive check (PPC)
 #   that is, sample from the posteriors and produce some fake data
 #   compare this fake data with observed data
+# TODO: protect against <0 deuteron energy samples?
+#
+
 from __future__ import print_function
 import numpy as np
 from numpy import inf
-from scipy.integrate import quad
 import scipy.optimize as optimize
 import matplotlib.pyplot as plot
 import emcee
 import csv as csvlib
-from constants.constants import (masses, qValues, distances, physics)
-from utilities.utilities import (beamTimingShape, ddnXSinterpolator)
+from constants.constants import (masses, distances, physics)
+from utilities.utilities import (beamTimingShape, ddnXSinterpolator, 
+                                 getDDneutronEnergy)
 
 
 ##############
@@ -49,31 +55,18 @@ x_binCenters = np.linspace(x_minRange + x_binSize/2,
                            x_bins)
 
 # PARAMETER BOUNDARIES
-min_e0, max_e0 = 800,1100
-min_e1,max_e1= -150, 0
-min_e2,max_e2 = -30, 0
-min_e3,max_e3 = -10, 0
-min_sigma,max_sigma = 40, 100
+min_e0, max_e0 = 750.0,1200.0
+min_e1,max_e1= -150.0, 0.0
+min_e2,max_e2 = -50.0, 0.0
+min_e3,max_e3 = -20.0, 0.0
+min_sigma_0,max_sigma_0 = 0.01, 0.2
+min_sigma_1,max_sigma_1 = 0.0, 0.1
 
 
 ddnXSinstance = ddnXSinterpolator()
 beamTiming = beamTimingShape()
 
 
-def getDDneutronEnergy(deuteronEnergy, labAngle = 0):
-    """Get the energy of neutrons produced by DDN reaction
-    Function accepts the deuteron energy (in keV) and the angle (in lab\
-    frame of reference) at which the neutron is emitted.
-    Returns neutron energy in keV
-    """     
-    neutronAngle_radians = labAngle * np.pi / 180
-    rVal = np.sqrt(masses.deuteron * masses.neutron*deuteronEnergy) / \
-                   (masses.neutron + masses.he3) * \
-                   np.cos(neutronAngle_radians)
-    sVal = (deuteronEnergy *( masses.he3 - masses.deuteron) +
-            qValues.ddn * masses.he3) / (masses.neutron + masses.he3)
-    sqrtNeutronEnergy = rVal + np.sqrt(np.power(rVal,2) + sVal)
-    return np.power(sqrtNeutronEnergy, 2)
     
 eN_binCenters = getDDneutronEnergy( eD_binCenters )
     
@@ -96,12 +89,14 @@ def generateModelData(params, standoffDistance, ddnXSfxn, nSamples, getPDF=False
     probably more efficient to pass it in rather than reinitializing
     one each time
     """
-    e0, e1, e2, e3, sigma = params
+    e0, e1, e2, e3, sigma_0, sigma_1 = params
     data_x=np.random.uniform(low=0.0, high=distances.tunlSSA_CsI.cellLength, size=nSamples)
     
     meanEnergy = (e0 + e1*data_x + e2*np.power(data_x,2) +
                   e3 * np.power(data_x,3))
-    data_eD = np.random.normal(loc=meanEnergy, scale=sigma)
+    sigmaValue = meanEnergy * (sigma_0 + data_x*sigma_1)
+    data_eD = np.random.normal(loc=meanEnergy, 
+                               scale=sigmaValue)
     data_weights = ddnXSfxn.evaluate(data_eD)
     dataHist2d, xedges, yedges = np.histogram2d( data_x, data_eD,
                                                 [x_bins, eD_bins],
@@ -131,7 +126,7 @@ def lnlike(params, observables, nDraws=1000000):
     """
     Evaluate the log likelihood using xs-weighting
     """
-    e0, e1,e2,e3,sigma = params
+    e0, e1,e2,e3,sigma_0,sigma_1 = params
     evalDataRaw = generateModelData(params, distances.tunlSSA_CsI.standoffMid,
                                           ddnXSinstance, nDraws, True)
     evalData = beamTiming.applySpreading( evalDataRaw )
@@ -147,9 +142,10 @@ def lnlike(params, observables, nDraws=1000000):
     
 
 def lnprior(theta):
-    e_0, e_1, e_2, e_3, sigma = theta
-    if min_e0 < e_0 < max_e0 and min_e1 <e_1< max_e1 and min_e2 < e_2<max_e2 \
-    and min_e3 < e_3 < max_e3 and min_sigma < sigma < max_sigma:
+    e_0, e_1, e_2, e_3, sigma_0, sigma_1 = theta
+    if (min_e0 < e_0 < max_e0 and min_e1 <e_1< max_e1 and min_e2 < e_2<max_e2 
+        and min_e3 < e_3 < max_e3 and min_sigma_0 < sigma_0 < max_sigma_0 and 
+        min_sigma_1 < sigma_1 < max_sigma_1):
         return 0
     return -inf
     
@@ -189,7 +185,8 @@ mp_e0_guess = 950 # initial deuteron energy, in keV
 mp_e1_guess = -100 # energy loss, 0th order approx, in keV/cm
 mp_e2_guess = -10
 mp_e3_guess = -5
-mp_sigma_guess = 80 # width of deuteron energy spread, fixed for now, in keV
+mp_sigma_0_guess = 0.1 # width of initial deuteron energy spread
+mp_sigma_1_guess = 0.05
 
 
 # get the data from file
@@ -215,7 +212,7 @@ plot.draw()
 # generate fake data
 nSamples = 10000
 fakeData = generateModelData([mp_e0_guess,mp_e1_guess,mp_e2_guess, 
-                              mp_e3_guess, mp_sigma_guess], 
+                              mp_e3_guess, mp_sigma_0_guess, mp_sigma_1_guess], 
                               distances.tunlSSA_CsI.standoffMid, 
                               ddnXSinstance, nSamples)
 
@@ -263,63 +260,69 @@ nll = lambda *args: -lnlike(*args)
 
 
 testNLL = nll([mp_e0_guess, mp_e1_guess, mp_e2_guess, 
-               mp_e3_guess, mp_sigma_guess], observedTOF)
+               mp_e3_guess, mp_sigma_0_guess, mp_sigma_1_guess], observedTOF)
 print('test NLL has value {}'.format(testNLL))
 
 
 parameterBounds=[(min_e0,max_e0),(min_e1,max_e1),(min_e2,max_e2),
-                 (min_e3,max_e3),(min_sigma,max_sigma)]
+                 (min_e3,max_e3),(min_sigma_0,max_sigma_0),
+                 (min_sigma_1,max_sigma_1)]
 minimizedNLL = optimize.minimize(nll, [mp_e0_guess,
                                        mp_e1_guess, mp_e2_guess, 
-                                       mp_e3_guess, mp_sigma_guess], 
+                                       mp_e3_guess, mp_sigma_0_guess,
+                                       mp_sigma_1_guess], 
                                        args=observedTOF, method='TNC',
                                        tol=1.0,  bounds=parameterBounds)
 
 print(minimizedNLL)
 
 
-nDim, nWalkers = 5, 100
+nDim, nWalkers = 6, 100
 
-e0, e1, e2, e3, sigma = minimizedNLL["x"]
+e0, e1, e2, e3, sigma0, sigma1 = minimizedNLL["x"]
 
-p0 = [[e0,e1,e2,e3,sigma] + 1e-1 * np.random.randn(nDim) for i in range(nWalkers)]
+p0 = [[e0,e1,e2,e3,sigma0,sigma1] + 1e-1 * np.random.randn(nDim) for i in range(nWalkers)]
 sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
                                 kwargs={'observables': observedTOF}, 
                                 threads=8)
 
 #sampler.run_mcmc(p0, 500)
 # run with progress updates..
-mcIterations = 5000
+mcIterations = 6000
 for i, samplerResult in enumerate(sampler.sample(p0, iterations=mcIterations)):
     if (i+1)%50 == 0:
         print("{0:5.1%}".format(float(i)/mcIterations))
 
 plot.figure()
-plot.subplot(511)
+plot.subplot(611)
 plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
-plot.ylabel('$E_0$ (keV)')
-plot.subplot(512)
+plot.ylabel(r'$E_0$ (keV)')
+plot.subplot(612)
 plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
-plot.ylabel('$E_1$ (keV/cm)')
-plot.subplot(513)
+plot.ylabel(r'$E_1$ (keV/cm)')
+plot.subplot(613)
 plot.plot(sampler.chain[:,:,2].T,'-',color='k',alpha=0.2)
 plot.ylabel(r'$E_2$ (keV/cm$^2$)')
 plot.xlabel('Step')
-plot.subplot(514)
+plot.subplot(614)
 plot.plot(sampler.chain[:,:,3].T,'-',color='k',alpha=0.2)
 plot.ylabel(r'$E_3$ (keV/cm$^3$)')
 plot.xlabel('Step')
-plot.subplot(515)
+plot.subplot(615)
 plot.plot(sampler.chain[:,:,4].T,'-',color='k',alpha=0.2)
-plot.ylabel('Sigma (keV)')
+plot.ylabel(r'$\sigma_0$ (keV)')
+plot.xlabel('Step')
+plot.subplot(616)
+plot.plot(sampler.chain[:,:,5].T,'-',color='k',alpha=0.2)
+plot.ylabel(r'$\sigma_1$ (keV/cm)')
 plot.xlabel('Step')
 plot.draw()
 
 
-samples = sampler.chain[:,2000:,:].reshape((-1,nDim))
+samples = sampler.chain[:,4000:,:].reshape((-1,nDim))
 # Compute the quantiles.
 # this comes from https://github.com/dfm/emcee/blob/master/examples/line.py
-e0_mcmc, e1_mcmc, e2_mcmc, e3_mcmc, sigma_mcmc = map(lambda v: (v[1], v[2]-v[1],
+e0_mcmc, e1_mcmc, e2_mcmc, e3_mcmc, sigma_0_mcmc, sigma_1_mcmc = map(lambda v: (v[1], v[2]-v[1],
                                                                 v[1]-v[0]),
                                                      zip(*np.percentile(samples, [16, 50, 84],
                                                                         axis=0)))
@@ -328,13 +331,14 @@ print("""MCMC result:
     E1 = {1[0]} +{1[1]} -{1[2]}
     E2 = {2[0]} +{2[1]} -{2[2]}
     E3 = {3[0]} +{3[1]} -{3[2]}
-    sigma = {4[0]} +{4[1]} -{4[2]}
-    """.format(e0_mcmc, e1_mcmc, e2_mcmc, e3_mcmc, sigma_mcmc))
+    sigma_0 = {4[0]} +{4[1]} -{4[2]}
+    sigma_1 = {5[0]} + {5[1]} - {5[2]}
+    """.format(e0_mcmc, e1_mcmc, e2_mcmc, e3_mcmc, sigma_0_mcmc, sigma_1_mcmc))
 
 
 import corner as corn
 cornerFig = corn.corner(samples,labels=["$E_0$","$E_1$","$E_2$","$E_3$",
-                                        "$\sigma$"],
+                                        "$\sigma_0$","$\sigma_1$"],
                         quantiles=[0.16,0.5,0.84], show_titles=True,
                         title_kwargs={'fontsize': 12})
 

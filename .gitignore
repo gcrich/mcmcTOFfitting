@@ -14,3 +14,7 @@ __pycache__/
 
 # in case any C things get included and built
 *.so
+
+# images
+*.png
+*.jpg

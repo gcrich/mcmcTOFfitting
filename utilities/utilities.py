@@ -35,6 +35,16 @@ min_e3,max_e3 = -10, 0
 min_sigma,max_sigma = 40, 100
 
 
+def normalizeVec(a):
+    """
+    Normalize a 1D vector
+    Simple, maybe inefficient
+    Doesn't check to make sure that you're supplying a valid vector!
+    """
+    integrated = np.sum(a)
+    return a/integrated
+
+
 def getDDneutronEnergy(deuteronEnergy, labAngle = 0):
     """
     Get the energy of neutrons produced by DDN reaction
@@ -190,7 +200,15 @@ class beamTimingShape:
                                         self.tofBinWidth/2),
                                       (self.windowRange_max -
                                        self.tofBinWidth/2), self.window_nBins)
-        self.timingDistribution = self.evaluateTimingDist(self.binCenters)
+                                       
+        # the idea is that this variable isnt persistent, may not be done correctly
+        tempTiming = self.evaluateTimingDist(self.binCenters)
+    
+        # now we want to normalize the timing distribution
+        # hopefully by doing this (once) we'll make it so that when we convolve
+        # with the other features it does not UNnormalize the other data
+        self.timingDistribution = normalizeVec(tempTiming)
+        
 
     def evaluateTimingDist(self, time):
         """
@@ -201,6 +219,14 @@ class beamTimingShape:
                   (np.sqrt(2)*self.sigma*self.tau))
         timingDistVal = np.exp(expArg) * (1- erf(erfArg))
         return timingDistVal
+
+    def applySpreading(self, tofDistribution):
+        """
+        Convolve the beam timing shape with raw TOF model data
+        tofDistribution should be a numpy array
+        binning needs to be accounted by user
+        """
+        return np.convolve(tofDistribution, self.timingDistribution, 'same')
 
 
 

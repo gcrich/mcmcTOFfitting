@@ -68,7 +68,7 @@ def getTOF(mass, energy, distance):
     return tof
     
     
-def generateModelData_XS(params, standoffDistance, ddnXSfxn, nSamples, getPDF=False):
+def generateModelData(params, standoffDistance, ddnXSfxn, nSamples, getPDF=False):
     """
     Generate model data with cross-section weighting applied
     ddnXSfxn is an instance of the ddnXSinterpolator class -

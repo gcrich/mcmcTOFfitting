@@ -13,6 +13,7 @@ from numpy import inf
 from scipy.integrate import quad
 from scipy.interpolate import interp1d
 import scipy.optimize as optimize
+from scipy.special import erf
 import csv as csvlib
 from constants.constants import (masses, qValues, distances, physics)
 
@@ -153,6 +154,54 @@ def readMultiStandoffTOFdata(filename):
                                     float(row['run2']), float(row['run3'])])
     tofData = np.column_stack((lowerBinEdges,tofCounts))
     return tofData
+
+
+class beamTimingShape:
+    """
+    Class with timing parameters for the gamma peak in TOF spectra
+    Assumes that the peak is modeled with a gaussian convolved with an exponential tail
+    The relevant parameters are then sigma and tau
+    
+    Note that right now these are tuned for TUNL CsI run at SSA
+    In long run, this class should not be so specific
+    
+    for an exponential convolved with a gaussian, see
+    https://ocw.mit.edu/courses/chemistry/5-33-advanced-chemical-experimentation-and-instrumentation-fall-2007/labs/laser_appendix3.pdf
+    
+    """
+    def __init__(self):
+        self.sigma = 1.2474 # ns, from roofit
+        self.tau = 0.92503
+        
+        
+        self.binnedTOF = True # flag to use binned values
+        # presently there's not necessarily a plan to handle unbinned
+        # but keep this flag here for forward compatibility
+        self.tofBinWidth = 1 # width of bins in ns
+    
+        # set up the range that we'll use for the sliding window
+        # right now they're just conservatively large
+        # TODO: the treatment here may assume a bin width of 1 in the use of ceil
+        self.windowRange_min = np.ceil(-1.0 * 5 * self.sigma)
+        self.windowRange_max = np.ceil(10 * self.tau)
+        self.window_nBins = self.windowRange_max - self.windowRange_min
+    
+        self.binCenters = np.linspace( (self.windowRange_min +
+                                        self.tofBinWidth/2),
+                                      (self.windowRange_max -
+                                       self.tofBinWidth/2), self.window_nBins)
+        self.timingDistribution = self.evaluateTimingDist(self.binCenters)
+
+    def evaluateTimingDist(self, time):
+        """
+        Get value for the timing distribution given a time from t0 in ns
+        """
+        expArg = self.sigma**2 / (2 * self.tau**2) - time / self.tau
+        erfArg = ((self.sigma**2 - time * self.tau)/
+                  (np.sqrt(2)*self.sigma*self.tau))
+        timingDistVal = np.exp(expArg) * (1- erf(erfArg))
+        return timingDistVal
+
 
 
 class ddnXSinterpolator:

@@ -8,11 +8,8 @@
 from __future__ import print_function
 import numpy as np
 from numpy import inf
-from scipy.integrate import quad
 import scipy.optimize as optimize
 import matplotlib.pyplot as plot
-import emcee
-from scipy.interpolate import interp1d
 from constants.constants import (masses, qValues, distances, physics)
 from utilities.utilities import ddnXSinterpolator
 

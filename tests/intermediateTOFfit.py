@@ -19,7 +19,7 @@ import matplotlib.pyplot as plot
 import emcee
 import csv as csvlib
 from constants.constants import (masses, qValues, distances, physics)
-from utilities.utilities import beamTimingShape
+from utilities.utilities import (beamTimingShape, ddnXSinterpolator)
 
 
 ##############
@@ -29,6 +29,24 @@ tof_minRange = 180.0
 tof_maxRange = 205.0
 tof_range = (tof_minRange,tof_maxRange)
 
+eD_bins = 150
+eD_minRange = 200.0
+eD_maxRange = 1700.0
+eD_range = (eD_minRange, eD_maxRange)
+eD_binSize = (eD_maxRange - eD_minRange)/eD_bins
+eD_binCenters = np.linspace(eD_minRange + eD_binSize/2,
+                            eD_maxRange - eD_binSize/2,
+                            eD_bins)
+
+
+x_bins = 100
+x_minRange = 0.0
+x_maxRange = distances.tunlSSA_CsI.cellLength
+x_range = (x_minRange,x_maxRange)
+x_binSize = (x_maxRange - x_minRange)/x_bins
+x_binCenters = np.linspace(x_minRange + x_binSize/2,
+                           x_maxRange - x_binSize/2,
+                           x_bins)
 
 # PARAMETER BOUNDARIES
 min_e0, max_e0 = 800,1100
@@ -38,7 +56,7 @@ min_e3,max_e3 = -10, 0
 min_sigma,max_sigma = 40, 100
 
 
-
+ddnXSinstance = ddnXSinterpolator()
 beamTiming = beamTimingShape()
 
 
@@ -49,13 +67,16 @@ def getDDneutronEnergy(deuteronEnergy, labAngle = 0):
     Returns neutron energy in keV
     """     
     neutronAngle_radians = labAngle * np.pi / 180
-    rVal = np.sqrt(mass_deuteron * mass_neutron*deuteronEnergy) / \
-                   (mass_neutron + mass_he3) * \
+    rVal = np.sqrt(masses.deuteron * masses.neutron*deuteronEnergy) / \
+                   (masses.neutron + masses.he3) * \
                    np.cos(neutronAngle_radians)
-    sVal = (deuteronEnergy *( mass_he3 - mass_deuteron) +
-            qValue_ddn * mass_he3) / (mass_neutron + mass_he3)
+    sVal = (deuteronEnergy *( masses.he3 - masses.deuteron) +
+            qValues.ddn * masses.he3) / (masses.neutron + masses.he3)
     sqrtNeutronEnergy = rVal + np.sqrt(np.power(rVal,2) + sVal)
     return np.power(sqrtNeutronEnergy, 2)
+    
+eN_binCenters = getDDneutronEnergy( eD_binCenters )
+    
     
 def getTOF(mass, energy, distance):
     """Compute time of flight, in nanoseconds, given\
@@ -63,7 +84,7 @@ def getTOF(mass, energy, distance):
     and the distance traveled (in cm).
     Though simple enough to write inline, this will be used often.
     """
-    velocity = speedOfLight * np.sqrt(2 * energy / mass)
+    velocity = physics.speedOfLight * np.sqrt(2 * energy / mass)
     tof = distance / velocity
     return tof
     
@@ -111,7 +132,7 @@ def lnlike(params, observables, nDraws=1000000):
     Evaluate the log likelihood using xs-weighting
     """
     e0, e1,e2,e3,sigma = params
-    evalDataRaw = generateModelData_XS(params, distances.tunlSSA_CsI.standoffMid,
+    evalDataRaw = generateModelData(params, distances.tunlSSA_CsI.standoffMid,
                                           ddnXSinstance, nDraws, True)
     evalData = beamTiming.applySpreading( evalDataRaw )
     logEvalHist = np.log(evalData)
@@ -195,23 +216,24 @@ plot.draw()
 nSamples = 10000
 fakeData = generateModelData([mp_e0_guess,mp_e1_guess,mp_e2_guess, 
                               mp_e3_guess, mp_sigma_guess], 
-                              distance_standoffMid, nSamples)
+                              distances.tunlSSA_CsI.standoffMid, 
+                              ddnXSinstance, nSamples)
 
 
 
 # plot the fake data...
 # but only 2000 points, no need to do more
-plot.figure()
-plot.scatter(fakeData[:2000,0], fakeData[:2000,2], color='k', alpha=0.3)
-plot.xlabel('Cell location (cm)')
-plot.ylabel('Neutron energy (keV)')
-plot.draw()
+#plot.figure()
+#plot.scatter(fakeData[:2000,0], fakeData[:2000,2], color='k', alpha=0.3)
+#plot.xlabel('Cell location (cm)')
+#plot.ylabel('Neutron energy (keV)')
+#plot.draw()
 
 
 # plot the TOF 
 plot.figure()
 plot.subplot(211)
-plot.hist(fakeData[:,3], 25, (180,205))
+plot.hist(fakeData, 25, (180,205))
 plot.ylabel('counts')
 plot.subplot(212)
 plot.scatter(observedTOFbinEdges,observedTOF)
@@ -222,11 +244,11 @@ plot.draw()
 
 # plot the TOF vs x location
 # again only plot 2000 points
-plot.figure()
-plot.scatter(fakeData[:2000,2],fakeData[:2000,3], color='k', alpha=0.3)
-plot.xlabel('Neutron energy (keV)' )
-plot.ylabel('TOF (ns)')
-plot.draw()
+#plot.figure()
+#plot.scatter(fakeData[:2000,2],fakeData[:2000,3], color='k', alpha=0.3)
+#plot.xlabel('Neutron energy (keV)' )
+#plot.ylabel('TOF (ns)')
+#plot.draw()
 
 ##########################################
 # here's where things are going to get interesting...
@@ -293,6 +315,8 @@ plot.ylabel('Sigma (keV)')
 plot.xlabel('Step')
 plot.draw()
 
+
+samples = sampler.chain[:,2000:,:].reshape((-1,nDim))
 # Compute the quantiles.
 # this comes from https://github.com/dfm/emcee/blob/master/examples/line.py
 e0_mcmc, e1_mcmc, e2_mcmc, e3_mcmc, sigma_mcmc = map(lambda v: (v[1], v[2]-v[1],
@@ -305,10 +329,9 @@ print("""MCMC result:
     E2 = {2[0]} +{2[1]} -{2[2]}
     E3 = {3[0]} +{3[1]} -{3[2]}
     sigma = {4[0]} +{4[1]} -{4[2]}
-    """.format(e0_mcmc, mp_e0_t, e1_mcmc, mp_e1_t,
-               sigma_mcmc, mp_sigma_t))
+    """.format(e0_mcmc, e1_mcmc, e2_mcmc, e3_mcmc, sigma_mcmc))
 
-samples = sampler.chain[:,2000:,:].reshape((-1,nDim))
+
 import corner as corn
 cornerFig = corn.corner(samples,labels=["$E_0$","$E_1$","$E_2$","$E_3$",
                                         "$\sigma$"],

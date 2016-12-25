@@ -317,8 +317,14 @@ class ddnXSinterpolator:
         # check  to see if we have requested an energy outside of range
         # if so, return the XS value at the end of the range
         # this is not ideal, but we really ought not find these regions matter
-        if deuteronEnergy <= 20:
-            return 0.025
-        if deuteronEnergy >= 10000:
-            return 46.5
+        if len(deuteronEnergy)==1:
+            if deuteronEnergy <= 20:
+                return 0.025
+            if deuteronEnergy >= 10000:
+                return 46.5
+        else:
+            lowIndices = np.where(deuteronEnergy <= 20)
+            highIndices = np.where(deuteronEnergy >= 10000)
+            deuteronEnergy[lowIndices] = 20
+            deuteronEnergy[highIndices] = 10000
         return self.ddnXSfunc(deuteronEnergy)

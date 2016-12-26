@@ -1,4 +1,4 @@
-#
+#!/bin/python
 #
 # intermediateTOFfit.py
 # created winter 2016 g.c.rich
@@ -23,16 +23,32 @@ import scipy.optimize as optimize
 import matplotlib.pyplot as plot
 import emcee
 import csv as csvlib
-from constants.constants import (masses, distances, physics)
+import argparse
+from constants.constants import (masses, distances, physics, tofWindows)
 from utilities.utilities import (beamTimingShape, ddnXSinterpolator, 
                                  getDDneutronEnergy)
 
 
+argParser = argparse.ArgumentParser()
+argParser.add_argument('-run',choices=[0,1,2,3],default=0,type=int)   
+parsedArgs = argParser.parse_args()
+runNumber = parsedArgs.run
+standoff = {0: distances.tunlSSA_CsI.standoffMid, 
+            1: distances.tunlSSA_CsI.standoffClose,
+            2: distances.tunlSSA_CsI.standoffClose,
+            3: distances.tunlSSA_CsI.standoffFar}
+standoffName = {0: 'mid', 1:'close', 2:'close', 3:'far'}
+
+tofWindowSettings = tofWindows()
 ##############
 # vars for binning of TOF 
-tof_nBins = 25
-tof_minRange = 180.0
-tof_maxRange = 205.0
+# this range covers each of the 4 multi-standoff runs
+#tof_nBins = 120
+#tof_minRange = 130.0
+#tof_maxRange = 250.0
+tof_nBins = tofWindowSettings.nBins[standoffName[runNumber]]
+tof_minRange = tofWindowSettings.minRange[standoffName[runNumber]]
+tof_maxRange = tofWindowSettings.maxRange[standoffName[runNumber]]
 tof_range = (tof_minRange,tof_maxRange)
 
 eD_bins = 150
@@ -56,11 +72,11 @@ x_binCenters = np.linspace(x_minRange + x_binSize/2,
 
 # PARAMETER BOUNDARIES
 min_e0, max_e0 = 750.0,1200.0
-min_e1,max_e1= -150.0, 0.0
+min_e1,max_e1= -100.0, 0.0
 min_e2,max_e2 = -50.0, 0.0
 min_e3,max_e3 = -20.0, 0.0
-min_sigma_0,max_sigma_0 = 0.01, 0.2
-min_sigma_1,max_sigma_1 = 0.0, 0.1
+min_sigma_0,max_sigma_0 = 0.02, 0.17
+min_sigma_1,max_sigma_1 = 0.0, 0.04
 
 
 ddnXSinstance = ddnXSinterpolator()
@@ -70,6 +86,7 @@ beamTiming = beamTimingShape()
     
 eN_binCenters = getDDneutronEnergy( eD_binCenters )
     
+
     
 def getTOF(mass, energy, distance):
     """Compute time of flight, in nanoseconds, given\
@@ -127,7 +144,7 @@ def lnlike(params, observables, nDraws=1000000):
     Evaluate the log likelihood using xs-weighting
     """
     e0, e1,e2,e3,sigma_0,sigma_1 = params
-    evalDataRaw = generateModelData(params, distances.tunlSSA_CsI.standoffMid,
+    evalDataRaw = generateModelData(params, standoff[runNumber],
                                           ddnXSinstance, nDraws, True)
     evalData = beamTiming.applySpreading( evalDataRaw )
     logEvalHist = np.log(evalData)
@@ -178,15 +195,18 @@ def readMultiStandoffTOFdata(filename):
     return tofData
     
     
+
+    
+    
 # mp_* are model parameters
 # *_t are 'true' values that go into our fake data
 # *_guess are guesses to start with
-mp_e0_guess = 950 # initial deuteron energy, in keV
-mp_e1_guess = -100 # energy loss, 0th order approx, in keV/cm
-mp_e2_guess = -10
-mp_e3_guess = -5
-mp_sigma_0_guess = 0.1 # width of initial deuteron energy spread
-mp_sigma_1_guess = 0.05
+mp_e0_guess = 900 # initial deuteron energy, in keV
+mp_e1_guess = -20 # energy loss, 0th order approx, in keV/cm
+mp_e2_guess = -15
+mp_e3_guess = -10
+mp_sigma_0_guess = 0.15 # width of initial deuteron energy spread
+mp_sigma_1_guess = 0.005
 
 
 # get the data from file
@@ -197,23 +217,23 @@ binEdges = tofData[:,0]
 
 #observedTOF, observed_bin_edges = np.histogram(fakeData[:,3], 
 #                                               tof_nBins, tof_range)
-observedTOF = tofData[:,1][(binEdges >= 180) & (binEdges < 205)]
-observedTOFbinEdges = tofData[:,0][(binEdges>=180)&(binEdges<205)]
+observedTOF = tofData[:,runNumber+1][(binEdges >= tof_minRange) & (binEdges < tof_maxRange)]
+observedTOFbinEdges = tofData[:,0][(binEdges>=tof_minRange)&(binEdges<tof_maxRange)]
 
 
 
 plot.figure()
-plot.scatter(binEdges, tofData[:,1] )
+plot.scatter(binEdges, tofData[:,runNumber+1] )
 plot.xlabel('tof (ns)')
 plot.ylabel('counts')
-plot.xlim(170.0,220.0)
+plot.xlim(tof_minRange,tof_maxRange)
 plot.draw()
 
 # generate fake data
 nSamples = 10000
 fakeData = generateModelData([mp_e0_guess,mp_e1_guess,mp_e2_guess, 
                               mp_e3_guess, mp_sigma_0_guess, mp_sigma_1_guess], 
-                              distances.tunlSSA_CsI.standoffMid, 
+                              standoff[runNumber], 
                               ddnXSinstance, nSamples)
 
 
@@ -230,15 +250,17 @@ fakeData = generateModelData([mp_e0_guess,mp_e1_guess,mp_e2_guess,
 # plot the TOF 
 plot.figure()
 plot.subplot(211)
-plot.hist(fakeData, 25, (180,205))
+tofbins = np.linspace(tof_minRange, tof_maxRange, tof_nBins)
+plot.scatter(tofbins, fakeData)
 plot.ylabel('counts')
 plot.subplot(212)
 plot.scatter(observedTOFbinEdges,observedTOF)
-plot.xlim(180,205)
+plot.xlim(tof_minRange,tof_maxRange)
 plot.xlabel('TOF (ns)')
 plot.ylabel('counts')
 plot.draw()
 
+plot.show()
 # plot the TOF vs x location
 # again only plot 2000 points
 #plot.figure()
@@ -267,24 +289,25 @@ print('test NLL has value {}'.format(testNLL))
 parameterBounds=[(min_e0,max_e0),(min_e1,max_e1),(min_e2,max_e2),
                  (min_e3,max_e3),(min_sigma_0,max_sigma_0),
                  (min_sigma_1,max_sigma_1)]
-minimizedNLL = optimize.minimize(nll, [mp_e0_guess,
-                                       mp_e1_guess, mp_e2_guess, 
-                                       mp_e3_guess, mp_sigma_0_guess,
-                                       mp_sigma_1_guess], 
-                                       args=observedTOF, method='TNC',
-                                       tol=1.0,  bounds=parameterBounds)
-
-print(minimizedNLL)
+#minimizedNLL = optimize.minimize(nll, [mp_e0_guess,
+#                                       mp_e1_guess, mp_e2_guess, 
+#                                       mp_e3_guess, mp_sigma_0_guess,
+#                                       mp_sigma_1_guess], 
+#                                       args=observedTOF, method='TNC',
+#                                       tol=1.0,  bounds=parameterBounds)
+#
+#print(minimizedNLL)
 
 
 nDim, nWalkers = 6, 100
 
-e0, e1, e2, e3, sigma0, sigma1 = minimizedNLL["x"]
+#e0, e1, e2, e3, sigma0, sigma1 = minimizedNLL["x"]
+e0, e1, e2, e3, sigma0, sigma1 = mp_e0_guess, mp_e1_guess, mp_e2_guess, mp_e3_guess, mp_sigma_0_guess, mp_sigma_1_guess
 
-p0 = [[e0,e1,e2,e3,sigma0,sigma1] + 1e-1 * np.random.randn(nDim) for i in range(nWalkers)]
+p0 = [[e0,e1,e2,e3,sigma0,sigma1] + 1e-2 * np.random.randn(nDim) for i in range(nWalkers)]
 sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
                                 kwargs={'observables': observedTOF}, 
-                                threads=8)
+                                threads=4)
 
 #sampler.run_mcmc(p0, 500)
 # run with progress updates..

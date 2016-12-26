@@ -51,3 +51,12 @@ class qValues(object):
     Q values of reactions
     """
     ddn = 3268.914  # Q value of DDN reaction, in keV
+
+    
+class tofWindows(object):
+    """
+    Windows of TOF used for different standoff distances
+    """
+    nBins = {'close': 45, 'mid': 50, 'far': 50}
+    maxRange = {'close': 175.0, 'mid': 225.0, 'far': 240.0}
+    minRange = {'close':130.0, 'mid': 175.0, 'far': 190.0}

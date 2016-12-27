@@ -4,6 +4,7 @@
 # of m.d. medley
 #
 # values etc from g.c. rich
+import scipy.constants as scipyConsts
 
 
 class physics(object):
@@ -11,13 +12,15 @@ class physics(object):
     Constants related to physics
     """
     speedOfLight = 29.9792  # in cm/ns
-
+    epsilon_0 = scipyConsts.epsilon_0 * 1e-2 # in F/cm
+    molarMassConstant = 1 # in g/mol
 
 
 class masses(object):
     """
     Constants related to masses
     """
+    electron = 511 # keV/c^2
     deuteron = 1.8756e+06  # keV /c^2
     neutron = 939565.0  # keV/c^2
     he3 = 2.809414e6  # keV/c^2

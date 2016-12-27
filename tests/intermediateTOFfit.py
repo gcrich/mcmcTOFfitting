@@ -72,8 +72,8 @@ x_binCenters = np.linspace(x_minRange + x_binSize/2,
 
 # PARAMETER BOUNDARIES
 min_e0, max_e0 = 750.0,1200.0
-min_e1,max_e1= -100.0, 0.0
-min_e2,max_e2 = -50.0, 0.0
+min_e1,max_e1= -50.0, 0.0
+min_e2,max_e2 = -35.0, 0.0
 min_e3,max_e3 = -20.0, 0.0
 min_sigma_0,max_sigma_0 = 0.02, 0.17
 min_sigma_1,max_sigma_1 = 0.0, 0.04

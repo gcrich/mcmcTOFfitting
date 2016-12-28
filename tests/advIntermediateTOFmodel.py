@@ -212,6 +212,20 @@ mp_sigma_0_guess = 0.15 # width of initial deuteron energy spread
 
 
 
+# get the data from file
+tofData = readMultiStandoffTOFdata('/home/gcr/particleyShared/quenchingFactors/tunlCsI_Jan2016/data/CODA/data/multistandoff.dat')
+
+
+binEdges = tofData[:,0]
+
+#observedTOF, observed_bin_edges = np.histogram(fakeData[:,3],
+#                                               tof_nBins, tof_range)
+observedTOF = tofData[:,runNumber+1][(binEdges >= tof_minRange) & (binEdges < tof_maxRange)]
+observedTOFbinEdges = tofData[:,0][(binEdges>=tof_minRange)&(binEdges<tof_maxRange)]
+
+
+
+
 # generate fake data
 nSamples = 10000
 fakeData = generateModelData([mp_e0_guess, mp_sigma_0_guess],

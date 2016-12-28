@@ -6,8 +6,11 @@
 # has classes/functions for handling ion stopping in materials
 # ie implementation of bethe function ODE
 #
-# TODO: maybe have a subclass for bethe or other specific treatments?
+# TODO: implement corrections in bethe stopping
 # TODO: check that certain fixed values are appropriate to have fixed
+# TODO: convenience functions to accept simpler args when initializing models
+#       e.g., specify 'D2,0.5atm', and look up appropriate parameters
+#       this is a 'maybe'
 
 from constants.constants import (physics,masses)
 import numpy as np
@@ -31,16 +34,28 @@ class ionStopping:
         Simple implementation of Bethe formula
         """
         def __init__(self, params):
+            """
+            simpleBethe class needs parameters: proton number, mass number, density, charge of incident ion, and mean excitation energy
+            """
             Z, A, rho, charge, excitation = params
             self.protonNumber = Z
             self.massNumber = A
             self.density = rho
             self.ionCharge = charge
             self.iExcitation = excitation
+            # go ahead and calculate number density of the stopping medium
+            # it won't change and will be used for every dEdx calc
             self.numDensity = (sciConsts.Avogadro * self.protonNumber *
                               self.density /
                               (self.massNumber*physics.molarMassConstant))
-            self.fixedFactor = 1.67489e-14 # worked out on paper
+                              
+            # this factor is (e**2/(4 pi epsilon_0))**2
+            # it doesn't depend on anything user will enter
+            # depending on unit system, perhaps a different value is needed
+            # but we're going all keV-cm-ns
+            # so use PEP8 naming convention for consts, which is ugly all caps
+            self.FIXED_FACTOR = 1.67489e-14 # worked out on paper
+        
         
         def dEdx(self, energy, x=0):
             """Calculate the stopping power at a given energy (in keV/cm)"""
@@ -53,7 +68,7 @@ class ionStopping:
                            velocity**2))
             logArg = (2 * masses.electron /(physics.speedOfLight**2)*
                       velocity**2 / (self.iExcitation*1e-3))
-            stopping = -1 * leadingTerm * self.fixedFactor * np.log(logArg)
+            stopping = -1 * leadingTerm * self.FIXED_FACTOR * np.log(logArg)
 #            print('leading term {}\nfixed {}\nlog {}'.format(leadingTerm,
 #                                                             self.fixedFactor,
 #                                                             np.log(logArg)))

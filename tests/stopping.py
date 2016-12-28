@@ -50,14 +50,12 @@ for idx, energy in enumerate(energies):
     print('{}\t{}\t{}'.format(energy,stoppingFxn(energy),stoppingModel.dEdx(energy)))
 
 
-eZeros = np.random.normal(900.0, 50, 500)
+eZeros = np.random.normal(900.0, 50, 5000)
 
 xLocations = np.linspace(0.0, distances.tunlSSA_CsI.cellLength, 50)
-solutions = []
-for e0 in eZeros:
-    solutions.append(odeint( stoppingModel.dEdx, e0, xLocations))
-#solvedE = odeint( stoppingFxn, e0, xLocations)
-print(len(solutions[0]))
-for sol in solutions:
-    plot.scatter(xLocations,sol[:,0],alpha=0.1,color='k')
+solutions = odeint( stoppingModel.dEdx, eZeros, xLocations)
+
+
+for idx in range(0,solutions.shape[1]):
+    plot.scatter(xLocations,solutions[:,idx],alpha=0.1,color='k')
 plot.show()

@@ -229,12 +229,12 @@ fakeData = generateModelData([mp_e0_guess, mp_sigma_0_guess],
 #plot.draw()
 
 
-# plot the TOF 
+# plot the TOF
+tofbins = np.linspace(tof_minRange, tof_maxRange, tof_nBins)
 plot.figure()
 plot.subplot(211)
 plot.scatter(tofbins, observedTOF,color='green')
 plot.subplot(212)
-tofbins = np.linspace(tof_minRange, tof_maxRange, tof_nBins)
 plot.scatter(tofbins, fakeData, color='red')
 plot.ylabel('counts')
 plot.xlabel('TOF (ns)')

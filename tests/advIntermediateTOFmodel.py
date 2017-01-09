@@ -227,7 +227,7 @@ observedTOFbinEdges = tofData[:,0][(binEdges>=tof_minRange)&(binEdges<tof_maxRan
 
 
 # generate fake data
-nSamples = 10000
+nSamples = 100000
 fakeData = generateModelData([mp_e0_guess, mp_sigma_0_guess],
                               standoff[runNumber], 
                               ddnXSinstance, stoppingModel.dEdx, nSamples)
@@ -306,7 +306,7 @@ fout = open('burninchain.dat','w')
 fout.close()
 
 burninSteps = 40
-for burninPos, burninProb, burninState in sampler.sample(p0, burninSteps)
+for burninPos, burninProb, burninState in sampler.sample(p0, burninSteps):
     f = open("burninchain.dat", "a")
     for k in range(burninPos.shape[0]):
         fout.write("{0:4d} {1:s}\n".format(k, " ".join(burninPos[k])))

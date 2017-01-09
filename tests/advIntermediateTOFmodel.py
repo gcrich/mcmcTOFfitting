@@ -73,13 +73,13 @@ x_binCenters = np.linspace(x_minRange + x_binSize/2,
                            x_bins)
 
 # parameters for making the fake data...
-nEvPerLoop = 10000
+nEvPerLoop = 100000
 data_x = np.repeat(x_binCenters,nEvPerLoop)
 
 
 # PARAMETER BOUNDARIES
-min_e0, max_e0 = 750.0,1100.0
-min_sigma_0,max_sigma_0 = 0.02, 0.17
+min_e0, max_e0 = 600.0,1100.0
+min_sigma_0,max_sigma_0 = 0.02, 0.3
 
 
 
@@ -162,7 +162,7 @@ def generateModelData(params, standoffDistance, ddnXSfxn, dedxfxn,
 
 
 
-def lnlike(params, observables, nDraws=1000000):
+def lnlike(params, observables, nDraws=10000000):
     """
     Evaluate the log likelihood using xs-weighting
     """
@@ -207,8 +207,8 @@ def lnprob(theta, observables):
 # mp_* are model parameters
 # *_t are 'true' values that go into our fake data
 # *_guess are guesses to start with
-mp_e0_guess = 900 # initial deuteron energy, in keV
-mp_sigma_0_guess = 0.15 # width of initial deuteron energy spread
+mp_e0_guess = 850 # initial deuteron energy, in keV
+mp_sigma_0_guess = 0.2 # width of initial deuteron energy spread
 
 
 
@@ -291,22 +291,54 @@ parameterBounds=[(min_e0,max_e0),(min_sigma_0,max_sigma_0)]
 #print(minimizedNLL)
 
 
-nDim, nWalkers = 2, 100
+nDim, nWalkers = 2, 20
 
 #e0, e1, e2, e3, sigma0, sigma1 = minimizedNLL["x"]
 e0, sigma0 = mp_e0_guess, mp_sigma_0_guess
 
-p0 = [[e0,sigma0] + 1e-2 * np.random.randn(nDim) for i in range(nWalkers)]
+p0 = [np.array([e0 + 10 * np.random.randn(), sigma0 + 1e-2 * np.random.randn()]) for i in range(nWalkers)]
 sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
                                 kwargs={'observables': observedTOF},
-                                threads=8)
+                                threads=12)
+
+
+fout = open('burninchain.dat','w')
+fout.close()
+
+burninSteps = 40
+for burninPos, burninProb, burninState in sampler.sample(p0, burninSteps)
+    f = open("burninchain.dat", "a")
+    for k in range(burninPos.shape[0]):
+        fout.write("{0:4d} {1:s}\n".format(k, " ".join(burninPos[k])))
+    fout.close()
+
+# save an image of the burn in sampling
+plot.figure()
+plot.subplot(211)
+plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
+plot.ylabel(r'$E_0$ (keV)')
+plot.subplot(212)
+plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
+plot.ylabel(r'$\sigma_0$ (keV)')
+plot.xlabel('Step')
+plot.savefig('emceeBurninSampleChainsOut.png',dpi=300)
+
 
 #sampler.run_mcmc(p0, 500)
 # run with progress updates..
-mcIterations = 600
-for i, samplerResult in enumerate(sampler.sample(p0, iterations=mcIterations)):
+fout = open('mainchain.dat','w')
+fout.close()
+
+sampler.reset()
+mcIterations = 50
+for i, samplerResult in enumerate(sampler.sample(burninPos, rstate0=burninState, iterations=mcIterations)):
     if (i+1)%2 == 0:
         print("{0:5.1%}".format(float(i)/mcIterations))
+    fout = open('mainchain.dat','a')
+    pos=samplerResult[0]
+    for k in range(pos.shape[0]):
+        fout.write("{0:4d} {1:s}\n".format(k, " ".join(pos[k])))
+    fout.close()
 
 plot.figure()
 plot.subplot(211)
@@ -316,10 +348,12 @@ plot.subplot(212)
 plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
 plot.ylabel(r'$\sigma_0$ (keV)')
 plot.xlabel('Step')
+plot.savefig('emceeRunSampleChainsOut.png',dpi=300)
 plot.draw()
 
 
-samples = sampler.chain[:,400:,:].reshape((-1,nDim))
+#samples = sampler.chain[:,400:,:].reshape((-1,nDim))
+samples = sampler.chain[:,:,:].reshape((-1,nDim))
 # Compute the quantiles.
 # this comes from https://github.com/dfm/emcee/blob/master/examples/line.py
 e0_mcmc, sigma_0_mcmc = map(lambda v: (v[1], v[2]-v[1],
@@ -328,7 +362,7 @@ e0_mcmc, sigma_0_mcmc = map(lambda v: (v[1], v[2]-v[1],
                                                                         axis=0)))
 print("""MCMC result:
     E0 = {0[0]} +{0[1]} -{0[2]}
-    sigma_0 = {4[0]} +{4[1]} -{4[2]}
+    sigma_0 = {1[0]} +{1[1]} -{1[2]}
     """.format(e0_mcmc, sigma_0_mcmc))
 
 
@@ -336,6 +370,6 @@ import corner as corn
 cornerFig = corn.corner(samples,labels=["$E_0$","$\sigma_0$"],
                         quantiles=[0.16,0.5,0.84], show_titles=True,
                         title_kwargs={'fontsize': 12})
-
+cornerFig.savefig('emceeRunCornerOut.png',dpi=300)
 
 plot.show()

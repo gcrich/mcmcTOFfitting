@@ -207,8 +207,8 @@ def lnprob(theta, observables):
 # mp_* are model parameters
 # *_t are 'true' values that go into our fake data
 # *_guess are guesses to start with
-mp_e0_guess = 850 # initial deuteron energy, in keV
-mp_sigma_0_guess = 0.2 # width of initial deuteron energy spread
+mp_e0_guess = 764 # initial deuteron energy, in keV
+mp_sigma_0_guess = 0.165 # width of initial deuteron energy spread
 
 
 
@@ -227,7 +227,7 @@ observedTOFbinEdges = tofData[:,0][(binEdges>=tof_minRange)&(binEdges<tof_maxRan
 
 
 # generate fake data
-nSamples = 100000
+nSamples = 1000000
 fakeData = generateModelData([mp_e0_guess, mp_sigma_0_guess],
                               standoff[runNumber], 
                               ddnXSinstance, stoppingModel.dEdx, nSamples)
@@ -291,7 +291,7 @@ parameterBounds=[(min_e0,max_e0),(min_sigma_0,max_sigma_0)]
 #print(minimizedNLL)
 
 
-nDim, nWalkers = 2, 20
+nDim, nWalkers = 2, 10
 
 #e0, e1, e2, e3, sigma0, sigma1 = minimizedNLL["x"]
 e0, sigma0 = mp_e0_guess, mp_sigma_0_guess
@@ -299,18 +299,23 @@ e0, sigma0 = mp_e0_guess, mp_sigma_0_guess
 p0 = [np.array([e0 + 10 * np.random.randn(), sigma0 + 1e-2 * np.random.randn()]) for i in range(nWalkers)]
 sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
                                 kwargs={'observables': observedTOF},
-                                threads=12)
+                                threads=6)
 
 
 fout = open('burninchain.dat','w')
 fout.close()
 
-burninSteps = 40
-for burninPos, burninProb, burninState in sampler.sample(p0, burninSteps):
-    f = open("burninchain.dat", "a")
+burninSteps = 20
+print('\n\n\nRUNNING BURN IN WITH {} STEPS\n\n\n'.format(burninSteps))
+
+for i,samplerOut in enumerate(sampler.sample(p0, iterations=burninSteps)):
+    burninPos, burninProb, burninRstate = samplerOut
+    print('running burn-in step {} of {}...'.format(i, burninSteps))
+    fout = open("burninchain.dat", "a")
     for k in range(burninPos.shape[0]):
-        fout.write("{0:4d} {1:s}\n".format(k, " ".join(burninPos[k])))
+        fout.write("{} {} {}\n".format(k, burninPos[k], burninProb[k]))
     fout.close()
+
 
 # save an image of the burn in sampling
 plot.figure()
@@ -331,13 +336,15 @@ fout.close()
 
 sampler.reset()
 mcIterations = 50
-for i, samplerResult in enumerate(sampler.sample(burninPos, rstate0=burninState, iterations=mcIterations)):
-    if (i+1)%2 == 0:
-        print("{0:5.1%}".format(float(i)/mcIterations))
+burninState = burninResult[2]
+for i,samplerResult in enumerate(sampler.sample(burninPos, rstate0=burninRstate, iterations=mcIterations)):
+    #if (i+1)%2 == 0:
+    #    print("{0:5.1%}".format(float(i)/mcIterations))
+    print('running step {} of {} in main chain'.format(i, mcIterations))
     fout = open('mainchain.dat','a')
     pos=samplerResult[0]
     for k in range(pos.shape[0]):
-        fout.write("{0:4d} {1:s}\n".format(k, " ".join(pos[k])))
+        fout.write("{} {}\n".format(k, pos[k]))
     fout.close()
 
 plot.figure()

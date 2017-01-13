@@ -148,8 +148,8 @@ def lnprob(theta, observables):
    
     
 def readMultiStandoffTOFdata(filename):
-    """
-    Read in data from TAC for multiple-standoff runs
+    """Read in data from TAC for multiple-standoff runs
+    
     Specify filename to access.
     """
     lowerBinEdges =[]
@@ -167,8 +167,8 @@ def readMultiStandoffTOFdata(filename):
 
 
 class beamTimingShape:
-    """
-    Class with timing parameters for the gamma peak in TOF spectra
+    """Class with timing parameters for the gamma peak in TOF spectra
+   
     Assumes that the peak is modeled with a gaussian convolved with an exponential tail
     The relevant parameters are then sigma and tau
     
@@ -221,8 +221,8 @@ class beamTimingShape:
         return timingDistVal
 
     def applySpreading(self, tofDistribution):
-        """
-        Convolve the beam timing shape with raw TOF model data
+        """Convolve the beam timing shape with raw TOF model data
+        
         tofDistribution should be a numpy array
         binning needs to be accounted by user
         """

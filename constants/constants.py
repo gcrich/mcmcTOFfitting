@@ -8,8 +8,7 @@ import scipy.constants as scipyConsts
 
 
 class physics(object):
-    """
-    Constants related to physics
+    """Constants related to physics
     """
     speedOfLight = 29.9792  # in cm/ns
     epsilon_0 = scipyConsts.epsilon_0 * 1e-2 # in F/cm
@@ -17,8 +16,7 @@ class physics(object):
 
 
 class masses(object):
-    """
-    Constants related to masses
+    """Constants related to masses
     """
     electron = 511 # keV/c^2
     deuteron = 1.8756e+06  # keV /c^2
@@ -27,12 +25,10 @@ class masses(object):
 
 
 class distances(object):
-    """
-    Distances related to a given experiment
+    """Distances related to a given experiment
     """
     class tunlSSA_CsI(object):
-        """
-        Distances associated with the Jan 2016 CsI QF run at TUNL SSA
+        """Distances associated with the Jan 2016 CsI QF run at TUNL SSA
         """
         # cm, distance from tipof gas cell to 0deg face
         cellToZero = 518.055
@@ -50,15 +46,13 @@ class distances(object):
 
 
 class qValues(object):
-    """
-    Q values of reactions
+    """Q values of reactions
     """
     ddn = 3268.914  # Q value of DDN reaction, in keV
 
     
 class tofWindows(object):
-    """
-    Windows of TOF used for different standoff distances
+    """Windows of TOF used for different standoff distances
     """
     nBins = {'close': 45, 'mid': 50, 'far': 50}
     maxRange = {'close': 175.0, 'mid': 225.0, 'far': 240.0}

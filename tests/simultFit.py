@@ -1,9 +1,9 @@
 #!/bin/python
 #
-# advIntermediateTOFmodel.py
+# simultFit.py
 # created winter 2016 g.c.rich
 #
-# this is a mildly complicated TOF fitting routine which makes fake data
+# tries to do simultaneous fitting of multiple-standoff TOF data
 #
 # incorporates DDN cross-section weighting, beam-profile spreading, AND
 #   Bethe-formula-based deuteron energy loss
@@ -24,6 +24,7 @@ import matplotlib.pyplot as plot
 import emcee
 import csv as csvlib
 import argparse
+from numbers import Number
 from constants.constants import (masses, distances, physics, tofWindows)
 from utilities.utilities import (beamTimingShape, ddnXSinterpolator, 
                                  getDDneutronEnergy)
@@ -40,6 +41,10 @@ standoff = {0: distances.tunlSSA_CsI.standoffMid,
             2: distances.tunlSSA_CsI.standoffClose,
             3: distances.tunlSSA_CsI.standoffFar}
 standoffName = {0: 'mid', 1:'close', 2:'close', 3:'far'}
+standoffs = [distances.tunlSSA_CsI.standoffMid, 
+             distances.tunlSSA_CsI.standoffClose,
+             distances.tunlSSA_CsI.standoffClose,
+             distances.tunlSSA_CsI.standoffFar]
 
 tofWindowSettings = tofWindows()
 ##############
@@ -48,10 +53,20 @@ tofWindowSettings = tofWindows()
 #tof_nBins = 120
 #tof_minRange = 130.0
 #tof_maxRange = 250.0
-tof_nBins = tofWindowSettings.nBins[standoffName[runNumber]]
-tof_minRange = tofWindowSettings.minRange[standoffName[runNumber]]
-tof_maxRange = tofWindowSettings.maxRange[standoffName[runNumber]]
-tof_range = (tof_minRange,tof_maxRange)
+tof_nBins = tofWindowSettings.nBins
+tof_minRange = [tofWindowSettings.minRange['mid'], 
+                tofWindowSettings.minRange['close'], 
+                tofWindowSettings.minRange['close'],
+                tofWindowSettings.minRange['far'] ]
+tof_maxRange = [tofWindowSettings.maxRange['mid'], 
+                tofWindowSettings.maxRange['close'], 
+                tofWindowSettings.maxRange['close'],
+                tofWindowSettings.maxRange['far'] ]
+tof_range = []
+for i in range(4):
+    tof_range.append((tof_minRange[i],tof_maxRange[i]))
+tofRunBins = [tof_nBins['mid'], tof_nBins['close'], 
+           tof_nBins['close'], tof_nBins['far']]
 
 eD_bins = 150
 eD_minRange = 200.0
@@ -102,7 +117,8 @@ eN_binCenters = getDDneutronEnergy( eD_binCenters )
 
     
 def getTOF(mass, energy, distance):
-    """Compute time of flight, in nanoseconds, given\
+    """
+    Compute time of flight, in nanoseconds, given\
     mass of particle (in keV/c^2), the particle's energy (in keV),\
     and the distance traveled (in cm).
     Though simple enough to write inline, this will be used often.
@@ -112,7 +128,7 @@ def getTOF(mass, energy, distance):
     return tof
     
     
-def generateModelData(params, standoffDistance, ddnXSfxn, dedxfxn,
+def generateModelData(params, standoffDistance, nBins_tof, ddnXSfxn, dedxfxn,
                       nSamples, getPDF=False):
     """
     Generate model data with cross-section weighting applied
@@ -120,6 +136,7 @@ def generateModelData(params, standoffDistance, ddnXSfxn, dedxfxn,
     dedxfxn is a function used to calculate dEdx -
     probably more efficient to these in rather than reinitializing
     one each time
+    This is edited to accommodate multiple standoffs being passed 
     """
     e0, sigma0 = params
     dataHist = np.zeros((x_bins, eD_bins))
@@ -144,32 +161,48 @@ def generateModelData(params, standoffDistance, ddnXSfxn, dedxfxn,
 #    plot.matshow(dataHist)
 #    plot.show()
     drawHist2d = (np.rint(dataHist * nSamples)).astype(int)
-    tofs = []
-    tofWeights = []
-    for index, weight in np.ndenumerate( drawHist2d ):
-        cellLocation = x_binCenters[index[0]]
-        effectiveDenergy = (e0 + eD_binCenters[index[1]])/2
-        tof_d = getTOF( masses.deuteron, effectiveDenergy, cellLocation )
-        neutronDistance = (distances.tunlSSA_CsI.cellLength - cellLocation +
+    if isinstance(standoffDistance, Number):
+        tofs = []
+        tofWeights = []
+        for index, weight in np.ndenumerate( drawHist2d ):
+            cellLocation = x_binCenters[index[0]]
+            effectiveDenergy = (e0 + eD_binCenters[index[1]])/2
+            tof_d = getTOF( masses.deuteron, effectiveDenergy, cellLocation )
+            neutronDistance = (distances.tunlSSA_CsI.cellLength - cellLocation +
                            distances.tunlSSA_CsI.zeroDegLength/2 +
                            standoffDistance )
-        tof_n = getTOF(masses.neutron, eN_binCenters[index[1]], neutronDistance)
-        tofs.append( tof_d + tof_n )
-        tofWeights.append(weight)
-    tofData, tofBinEdges = np.histogram( tofs, bins=tof_nBins, range=tof_range,
+            tof_n = getTOF(masses.neutron, eN_binCenters[index[1]], neutronDistance)
+            tofs.append( tof_d + tof_n )
+            tofWeights.append(weight)
+        tofData, tofBinEdges = np.histogram( tofs, bins=tof_nBins, range=tof_range,
                                         weights=tofWeights, density=getPDF)
-    return tofData
+        return tofData
+    tofDataCollection = []
+    for idx,standoff in enumerate(standoffDistance):
+        tofs = []
+        tofWeights = []
+        for index, weight in np.ndenumerate( drawHist2d ):
+            cellLocation = x_binCenters[index[0]]
+            effectiveDenergy = (e0 + eD_binCenters[index[1]])/2
+            tof_d = getTOF( masses.deuteron, effectiveDenergy, cellLocation )
+            neutronDistance = (distances.tunlSSA_CsI.cellLength - cellLocation +
+                               distances.tunlSSA_CsI.zeroDegLength/2 +
+                               standoff )
+            tof_n = getTOF(masses.neutron, eN_binCenters[index[1]], neutronDistance)
+            tofs.append( tof_d + tof_n )
+            tofWeights.append(weight)
+        tofData, tofBinEdges = np.histogram( tofs, bins=nBins_tof[idx], range=tof_range[idx],
+                                        weights=tofWeights, density=getPDF)
+        tofDataCollection.append( tofData )
+    return tofDataCollection
 
-
-
-def lnlike(params, observables, nDraws=100000):
+    
+def lnlikeHelp(evalDataRaw, observables):
     """
-    Evaluate the log likelihood using xs-weighting
+    helper function for use in lnlike function and its possible parallelization
+    handles convolution of beam-timing characteristics with fake data
+    then actually does the likelihood eval and returns likelihood value
     """
-    e0, sigma0 = params
-    evalDataRaw = generateModelData(params, standoff[runNumber],
-                                    ddnXSinstance, stoppingModel.dEdx,
-                                    nDraws, True)
     evalData = beamTiming.applySpreading( evalDataRaw )
     logEvalHist = np.log(evalData)
     zeroObservedIndices = np.where(observables == 0)[0]
@@ -177,7 +210,23 @@ def lnlike(params, observables, nDraws=100000):
         if logEvalHist[idx] == -inf:
             logEvalHist[zeroObservedIndices] = 0
 
-    loglike = np.dot(logEvalHist,observables)
+    return np.dot(logEvalHist,observables) # returns loglike value
+
+
+def lnlike(params, observables, standoffDist, tofBinning, nDraws=100000):
+    """
+    Evaluate the log likelihood using xs-weighting
+    """        
+    loglike = 0
+    e0, sigma0 = params
+    evalDataRaw = generateModelData(params, standoffDist, tofBinning,
+                                    ddnXSinstance, stoppingModel.dEdx,
+                                    nDraws, True)
+    if not isinstance(observables[0], Number):
+        for idx,obsSet in enumerate(evalDataRaw):
+            loglike = loglike + lnlikeHelp(evalDataRaw[idx], obsSet)
+    else:
+        loglike = lnlikeHelp(evalDataRaw, observables)
     return loglike
     
     
@@ -188,7 +237,7 @@ def lnprior(theta):
         return 0
     return -inf
     
-def lnprob(theta, observables):
+def lnprob(theta, observables, standoffDist, tofbinning):
     """Evaluate the log probability
     theta is a list of the model parameters
     observables is, in this case, a histogram of TOF values
@@ -196,7 +245,7 @@ def lnprob(theta, observables):
     prior = lnprior(theta)
     if not np.isfinite(prior):
         return -inf
-    return prior + lnlike(theta, observables)
+    return prior + lnlike(theta, observables, standoffDist, tofbinning)
    
 
     
@@ -220,8 +269,11 @@ binEdges = tofData[:,0]
 
 #observedTOF, observed_bin_edges = np.histogram(fakeData[:,3],
 #                                               tof_nBins, tof_range)
-observedTOF = tofData[:,runNumber+1][(binEdges >= tof_minRange) & (binEdges < tof_maxRange)]
-observedTOFbinEdges = tofData[:,0][(binEdges>=tof_minRange)&(binEdges<tof_maxRange)]
+observedTOF = []
+observedTOFbinEdges=[]
+for i in range(4):
+    observedTOF.append(tofData[:,i+1][(binEdges >= tof_minRange[i]) & (binEdges < tof_maxRange[i])])
+    observedTOFbinEdges.append(tofData[:,0][(binEdges>=tof_minRange[i])&(binEdges<tof_maxRange[i])])
 
 
 
@@ -229,7 +281,7 @@ observedTOFbinEdges = tofData[:,0][(binEdges>=tof_minRange)&(binEdges<tof_maxRan
 # generate fake data
 nSamples = 100000
 fakeData = generateModelData([mp_e0_guess, mp_sigma_0_guess],
-                              standoff[runNumber], 
+                              standoffs, tofRunBins, 
                               ddnXSinstance, stoppingModel.dEdx, nSamples)
 
 
@@ -244,15 +296,20 @@ fakeData = generateModelData([mp_e0_guess, mp_sigma_0_guess],
 
 
 # plot the TOF
-tofbins = np.linspace(tof_minRange, tof_maxRange, tof_nBins)
+tofbins = []
+runColors=['#1b9e77','#d95f02','#7570b3','#e7298a']
+for idx in range(len(tof_minRange)):
+    tofbins.append(np.linspace(tof_minRange[idx], tof_maxRange[idx], tofRunBins[idx]))
 plot.figure()
 plot.subplot(211)
-plot.scatter(tofbins, observedTOF,color='green')
+for i in range(len(tof_minRange)):
+    plot.scatter(tofbins[i], observedTOF[i], color=runColors[i])
 plot.subplot(212)
-plot.scatter(tofbins, fakeData, color='red')
+for i in range(len(tof_minRange)):
+    plot.scatter(tofbins[i], fakeData[i], color=runColors[i])
 plot.ylabel('counts')
 plot.xlabel('TOF (ns)')
-plot.xlim(tof_minRange,tof_maxRange)
+plot.xlim(min(tof_minRange),max(tof_maxRange))
 plot.draw()
 
 plot.show()
@@ -276,7 +333,7 @@ plot.show()
 nll = lambda *args: -lnlike(*args)
 
 
-testNLL = nll([mp_e0_guess, mp_sigma_0_guess], fakeData)
+testNLL = nll([mp_e0_guess, mp_sigma_0_guess], fakeData, standoffs, tofRunBins)
 print('test NLL has value {}'.format(testNLL))
 
 
@@ -298,7 +355,9 @@ e0, sigma0 = mp_e0_guess, mp_sigma_0_guess
 
 p0 = [np.array([e0 + 10 * np.random.randn(), sigma0 + 1e-2 * np.random.randn()]) for i in range(nWalkers)]
 sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
-                                kwargs={'observables': observedTOF},
+                                kwargs={'observables': observedTOF,
+                                        'standoffDist': standoffs,
+                                        'tofbinning': tofRunBins},
                                 threads=6)
 
 
@@ -342,8 +401,9 @@ for i,samplerResult in enumerate(sampler.sample(burninPos, lnprob0=burninProb, r
     print('running step {} of {} in main chain'.format(i, mcIterations))
     fout = open('mainchain.dat','a')
     pos=samplerResult[0]
+    prob = samplerResult[1]
     for k in range(pos.shape[0]):
-        fout.write("{} {}\n".format(k, pos[k]))
+        fout.write("{} {} {}\n".format(k, pos[k], prob[k]))
     fout.close()
 
 plot.figure()

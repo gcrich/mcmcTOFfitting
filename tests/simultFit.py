@@ -138,11 +138,23 @@ def generateModelData(params, standoffDistance, nBins_tof, ddnXSfxn, dedxfxn,
     one each time
     This is edited to accommodate multiple standoffs being passed 
     """
-    e0, sigma0 = params
+    if isinstance(params, Number):
+        e0 = params
+        oneParam = True
+    else:
+        if len(params) == 1:
+            e0 = params[0]
+            oneParam =True
+        else:
+            e0, sigma0 = params
+            oneParam = False
     dataHist = np.zeros((x_bins, eD_bins))
     nLoops = int(nSamples / nEvPerLoop)
     for loopNum in range(0, nLoops):
-        eZeros = np.random.normal( e0, sigma0*e0, nEvPerLoop )
+        if oneParam:
+            eZeros = np.repeat(params, nEvPerLoop)
+        else:
+            eZeros = np.random.normal( params[0], params[0]*params[1], nEvPerLoop )
         data_eD_matrix = odeint( dedxfxn, eZeros, x_binCenters )
         data_eD = data_eD_matrix.flatten('K')
         data_weights = ddnXSfxn.evaluate(data_eD)
@@ -218,7 +230,7 @@ def lnlike(params, observables, standoffDist, tofBinning, nDraws=200000):
     Evaluate the log likelihood using xs-weighting
     """        
     loglike = 0
-    e0, sigma0 = params
+    #e0, sigma0 = params
     evalDataRaw = generateModelData(params, standoffDist, tofBinning,
                                     ddnXSinstance, stoppingModel.dEdx,
                                     nDraws, True)
@@ -232,10 +244,18 @@ def lnlike(params, observables, standoffDist, tofBinning, nDraws=200000):
     
 
 def lnprior(theta):
-    e_0, sigma_0 = theta
-    if (min_e0 < e_0 < max_e0 and min_sigma_0 < sigma_0 < max_sigma_0):
-        return 0
-    return -inf
+    #print('lnprior function is passed:')
+    #print(theta)
+    if len(theta) == 1:
+        if min_e0 < theta[0] < max_e0:
+            return 0
+        return -inf
+    else:
+        e_0, sigma_0 = theta
+        if (min_e0 < e_0 < max_e0 and min_sigma_0 < sigma_0 < max_sigma_0):
+            return 0
+        return -inf
+    return -inf # shouldn't really ever get here, but just in case...
     
 def lnprob(theta, observables, standoffDist, tofbinning):
     """Evaluate the log probability
@@ -348,12 +368,12 @@ parameterBounds=[(min_e0,max_e0),(min_sigma_0,max_sigma_0)]
 #print(minimizedNLL)
 
 
-nDim, nWalkers = 2, 200
+nDim, nWalkers = 1, 200
 
-#e0, e1, e2, e3, sigma0, sigma1 = minimizedNLL["x"]
 e0, sigma0 = mp_e0_guess, mp_sigma_0_guess
 
-p0 = [np.array([e0 + 50 * np.random.randn(), sigma0 + 1e-2 * np.random.randn()]) for i in range(nWalkers)]
+#p0 = [np.array([e0 + 50 * np.random.randn(), sigma0 + 1e-2 * np.random.randn()]) for i in range(nWalkers)]
+p0 = [e0 + 50 * np.random.randn(nDim) for i in range(nWalkers)]
 sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
                                 kwargs={'observables': observedTOF,
                                         'standoffDist': standoffs,
@@ -375,17 +395,25 @@ for i,samplerOut in enumerate(sampler.sample(p0, iterations=burninSteps)):
         fout.write("{} {} {}\n".format(k, burninPos[k], burninProb[k]))
     fout.close()
 
+e0_only = True
 
 # save an image of the burn in sampling
-plot.figure()
-plot.subplot(211)
-plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
-plot.ylabel(r'$E_0$ (keV)')
-plot.subplot(212)
-plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
-plot.ylabel(r'$\sigma_0$ (keV)')
-plot.xlabel('Step')
+if not e0_only:
+    plot.figure()
+    plot.subplot(211)
+    plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
+    plot.ylabel(r'$E_0$ (keV)')
+    plot.subplot(212)
+    plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
+    plot.ylabel(r'$\sigma_0$ (keV)')
+    plot.xlabel('Step')
+else:
+    plot.figure()
+    plot.plot( sampler.chain[:,:].T, '-', color='k', alpha=0.2)
+    plot.ylabel(r'$E_0$ (keV)')
+    plot.xlabel('Step')
 plot.savefig('emceeBurninSampleChainsOut.png',dpi=300)
+plot.draw()
 
 
 #sampler.run_mcmc(p0, 500)
@@ -406,36 +434,49 @@ for i,samplerResult in enumerate(sampler.sample(burninPos, lnprob0=burninProb, r
         fout.write("{} {} {}\n".format(k, pos[k], prob[k]))
     fout.close()
 
-plot.figure()
-plot.subplot(211)
-plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
-plot.ylabel(r'$E_0$ (keV)')
-plot.subplot(212)
-plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
-plot.ylabel(r'$\sigma_0$ (keV)')
-plot.xlabel('Step')
+if not e0_only:
+    plot.figure()
+    plot.subplot(211)
+    plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
+    plot.ylabel(r'$E_0$ (keV)')
+    plot.subplot(212)
+    plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
+    plot.ylabel(r'$\sigma_0$ (keV)')
+    plot.xlabel('Step')
+else:
+    plot.figure()
+    plot.plot(sampler.chain[:,:].T,'-',color='k',alpha=0.2)
+    plot.ylabel(r'$E_0$ (keV)')
+    plot.xlabel('Step')
 plot.savefig('emceeRunSampleChainsOut.png',dpi=300)
 plot.draw()
 
-
-#samples = sampler.chain[:,400:,:].reshape((-1,nDim))
 samples = sampler.chain[:,:,:].reshape((-1,nDim))
-# Compute the quantiles.
-# this comes from https://github.com/dfm/emcee/blob/master/examples/line.py
-e0_mcmc, sigma_0_mcmc = map(lambda v: (v[1], v[2]-v[1],
-                                                                v[1]-v[0]),
-                                                     zip(*np.percentile(samples, [16, 50, 84],
-                                                                        axis=0)))
-print("""MCMC result:
-    E0 = {0[0]} +{0[1]} -{0[2]}
-    sigma_0 = {1[0]} +{1[1]} -{1[2]}
-    """.format(e0_mcmc, sigma_0_mcmc))
 
+if not e0_only:
+    # Compute the quantiles.
+    # this comes from https://github.com/dfm/emcee/blob/master/examples/line.py
+    e0_mcmc, sigma_0_mcmc = map(lambda v: (v[1], v[2]-v[1],
+                                                                    v[1]-v[0]),
+                                                         zip(*np.percentile(samples, [16, 50, 84],
+                                                                            axis=0)))
+    print("""MCMC result:
+        E0 = {0[0]} +{0[1]} -{0[2]}
+        sigma_0 = {1[0]} +{1[1]} -{1[2]}
+        """.format(e0_mcmc, sigma_0_mcmc))
+    
+    
+    import corner as corn
+    cornerFig = corn.corner(samples,labels=["$E_0$","$\sigma_0$"],
+                            quantiles=[0.16,0.5,0.84], show_titles=True,
+                            title_kwargs={'fontsize': 12})
+    cornerFig.savefig('emceeRunCornerOut.png',dpi=300)
+else:
+    getQuartilesFromPercentiles = lambda v:(v[1], v[2]-v[1],v[1]-v[0])
 
-import corner as corn
-cornerFig = corn.corner(samples,labels=["$E_0$","$\sigma_0$"],
-                        quantiles=[0.16,0.5,0.84], show_titles=True,
-                        title_kwargs={'fontsize': 12})
-cornerFig.savefig('emceeRunCornerOut.png',dpi=300)
-
+    e0_mcmc = getQuartilesFromPercentiles(np.percentile(samples, [16,50,84], axis=0).T[0,:])
+    print("""MCMC result:
+        E0 = {0[0]} +{0[1]} -{0[2]}
+        """.format(e0_mcmc))
+    
 plot.show()

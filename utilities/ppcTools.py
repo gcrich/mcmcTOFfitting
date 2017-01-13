@@ -19,3 +19,6 @@ from utilities.utilities import (beamTimingShape, ddnXSinterpolator,
                                  getDDneutronEnergy)
 from utilities.ionStopping import ionStopping
 
+class ppcTools:
+    """Assist in the sampling of posterior distributions from MCMC TOF fits
+    """

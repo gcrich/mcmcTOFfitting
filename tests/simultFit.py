@@ -88,13 +88,13 @@ x_binCenters = np.linspace(x_minRange + x_binSize/2,
                            x_bins)
 
 # parameters for making the fake data...
-nEvPerLoop = 100000
+nEvPerLoop = 200000
 data_x = np.repeat(x_binCenters,nEvPerLoop)
 
 
 # PARAMETER BOUNDARIES
-min_e0, max_e0 = 600.0,1100.0
-min_sigma_0,max_sigma_0 = 0.02, 0.3
+min_e0, max_e0 = 600.0,1300.0
+min_sigma_0,max_sigma_0 = 0.001, 0.3
 
 
 
@@ -213,7 +213,7 @@ def lnlikeHelp(evalDataRaw, observables):
     return np.dot(logEvalHist,observables) # returns loglike value
 
 
-def lnlike(params, observables, standoffDist, tofBinning, nDraws=100000):
+def lnlike(params, observables, standoffDist, tofBinning, nDraws=200000):
     """
     Evaluate the log likelihood using xs-weighting
     """        
@@ -256,8 +256,8 @@ def lnprob(theta, observables, standoffDist, tofbinning):
 # mp_* are model parameters
 # *_t are 'true' values that go into our fake data
 # *_guess are guesses to start with
-mp_e0_guess = 764 # initial deuteron energy, in keV
-mp_sigma_0_guess = 0.165 # width of initial deuteron energy spread
+mp_e0_guess = 1000 # initial deuteron energy, in keV
+mp_sigma_0_guess = 0.05 # width of initial deuteron energy spread
 
 
 
@@ -279,7 +279,7 @@ for i in range(4):
 
 
 # generate fake data
-nSamples = 100000
+nSamples = 200000
 fakeData = generateModelData([mp_e0_guess, mp_sigma_0_guess],
                               standoffs, tofRunBins, 
                               ddnXSinstance, stoppingModel.dEdx, nSamples)
@@ -348,12 +348,12 @@ parameterBounds=[(min_e0,max_e0),(min_sigma_0,max_sigma_0)]
 #print(minimizedNLL)
 
 
-nDim, nWalkers = 2, 50
+nDim, nWalkers = 2, 200
 
 #e0, e1, e2, e3, sigma0, sigma1 = minimizedNLL["x"]
 e0, sigma0 = mp_e0_guess, mp_sigma_0_guess
 
-p0 = [np.array([e0 + 10 * np.random.randn(), sigma0 + 1e-2 * np.random.randn()]) for i in range(nWalkers)]
+p0 = [np.array([e0 + 50 * np.random.randn(), sigma0 + 1e-2 * np.random.randn()]) for i in range(nWalkers)]
 sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
                                 kwargs={'observables': observedTOF,
                                         'standoffDist': standoffs,
@@ -364,7 +364,7 @@ sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob,
 fout = open('burninchain.dat','w')
 fout.close()
 
-burninSteps = 20
+burninSteps = 50
 print('\n\n\nRUNNING BURN IN WITH {} STEPS\n\n\n'.format(burninSteps))
 
 for i,samplerOut in enumerate(sampler.sample(p0, iterations=burninSteps)):
@@ -394,7 +394,7 @@ fout = open('mainchain.dat','w')
 fout.close()
 
 sampler.reset()
-mcIterations = 50
+mcIterations = 100
 for i,samplerResult in enumerate(sampler.sample(burninPos, lnprob0=burninProb, rstate0=burninRstate, iterations=mcIterations)):
     #if (i+1)%2 == 0:
     #    print("{0:5.1%}".format(float(i)/mcIterations))

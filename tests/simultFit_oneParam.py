@@ -255,7 +255,7 @@ def lnprob(theta, observables, standoffDist, tofbinning, tofrange):
 # mp_* are model parameters
 # *_t are 'true' values that go into our fake data
 # *_guess are guesses to start with
-mp_e0_guess = 900 # initial deuteron energy, in keV
+mp_e0_guess = 800 # initial deuteron energy, in keV
 mp_sigma_0_guess = 0.05 # width of initial deuteron energy spread
 
 

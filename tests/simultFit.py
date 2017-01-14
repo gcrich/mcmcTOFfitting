@@ -30,6 +30,7 @@ from utilities.utilities import (beamTimingShape, ddnXSinterpolator,
                                  getDDneutronEnergy)
 from utilities.utilities import readMultiStandoffTOFdata
 from utilities.ionStopping import ionStopping
+from math import isnan
 
 
 argParser = argparse.ArgumentParser()
@@ -93,7 +94,7 @@ data_x = np.repeat(x_binCenters,nEvPerLoop)
 
 
 # PARAMETER BOUNDARIES
-min_e0, max_e0 = 600.0,1300.0
+min_e0, max_e0 = 100.0,2000.0
 min_sigma_0,max_sigma_0 = 0.001, 0.3
 
 
@@ -215,7 +216,7 @@ def lnlikeHelp(evalDataRaw, observables):
     handles convolution of beam-timing characteristics with fake data
     then actually does the likelihood eval and returns likelihood value
     """
-    evalData = beamTiming.applySpreading( evalDataRaw )
+    #evalData = beamTiming.applySpreading( evalDataRaw )
     logEvalHist = np.log(evalData)
     zeroObservedIndices = np.where(observables == 0)[0]
     for idx in zeroObservedIndices:
@@ -246,9 +247,16 @@ def lnlike(params, observables, standoffDist, tofBinning, nDraws=200000):
 def lnprior(theta):
     #print('lnprior function is passed:')
     #print(theta)
+    if isinstance(theta, Number):
+        if min_e0 < theta < max_e0:
+            return 0
+        return -inf
     if len(theta) == 1:
         if min_e0 < theta[0] < max_e0:
             return 0
+        return -inf
+    if len(theta) > 2: #what?
+        print(theta)
         return -inf
     else:
         e_0, sigma_0 = theta
@@ -265,7 +273,14 @@ def lnprob(theta, observables, standoffDist, tofbinning):
     prior = lnprior(theta)
     if not np.isfinite(prior):
         return -inf
-    return prior + lnlike(theta, observables, standoffDist, tofbinning)
+    logprob = prior + lnlike(theta, observables, standoffDist, tofbinning)
+    if isnan(logprob):
+        print('\n\n\n\nWARNING\nlogprob evaluated to NaN\nDump of observables and then parameters used for evaluation follow\n\n\n')
+        print(observables)
+        print('\n\nPARAMETERS\n\n')
+        print(theta)
+        return -inf
+    return logprob
    
 
     
@@ -276,7 +291,7 @@ def lnprob(theta, observables, standoffDist, tofbinning):
 # mp_* are model parameters
 # *_t are 'true' values that go into our fake data
 # *_guess are guesses to start with
-mp_e0_guess = 1000 # initial deuteron energy, in keV
+mp_e0_guess = 1200 # initial deuteron energy, in keV
 mp_sigma_0_guess = 0.05 # width of initial deuteron energy spread
 
 
@@ -300,9 +315,10 @@ for i in range(4):
 
 # generate fake data
 nSamples = 200000
-fakeData = generateModelData([mp_e0_guess, mp_sigma_0_guess],
+fakeDataRaw = generateModelData([mp_e0_guess],
                               standoffs, tofRunBins, 
                               ddnXSinstance, stoppingModel.dEdx, nSamples)
+fakeData = beamTiming.applySpreading( fakeDataRaw )
 
 
 
@@ -324,6 +340,7 @@ plot.figure()
 plot.subplot(211)
 for i in range(len(tof_minRange)):
     plot.scatter(tofbins[i], observedTOF[i], color=runColors[i])
+plot.xlim(min(tof_minRange), max(tof_maxRange))
 plot.subplot(212)
 for i in range(len(tof_minRange)):
     plot.scatter(tofbins[i], fakeData[i], color=runColors[i])
@@ -333,6 +350,7 @@ plot.xlim(min(tof_minRange),max(tof_maxRange))
 plot.draw()
 
 plot.show()
+quit()
 # plot the TOF vs x location
 # again only plot 2000 points
 #plot.figure()
@@ -368,12 +386,13 @@ parameterBounds=[(min_e0,max_e0),(min_sigma_0,max_sigma_0)]
 #print(minimizedNLL)
 
 
-nDim, nWalkers = 1, 200
+nDim, nWalkers = 1, 250
 
 e0, sigma0 = mp_e0_guess, mp_sigma_0_guess
 
 #p0 = [np.array([e0 + 50 * np.random.randn(), sigma0 + 1e-2 * np.random.randn()]) for i in range(nWalkers)]
-p0 = [e0 + 50 * np.random.randn(nDim) for i in range(nWalkers)]
+p0 = [e0 +  100*np.random.randn(nDim) for i in range(nWalkers)]
+#p0 = np.random.uniform(600.0, 1300.0, size=nWalkers)
 sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
                                 kwargs={'observables': observedTOF,
                                         'standoffDist': standoffs,
@@ -409,7 +428,7 @@ if not e0_only:
     plot.xlabel('Step')
 else:
     plot.figure()
-    plot.plot( sampler.chain[:,:].T, '-', color='k', alpha=0.2)
+    plot.plot( sampler.chain[:,:,0].T, '-', color='k', alpha=0.2)
     plot.ylabel(r'$E_0$ (keV)')
     plot.xlabel('Step')
 plot.savefig('emceeBurninSampleChainsOut.png',dpi=300)
@@ -445,7 +464,7 @@ if not e0_only:
     plot.xlabel('Step')
 else:
     plot.figure()
-    plot.plot(sampler.chain[:,:].T,'-',color='k',alpha=0.2)
+    plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
     plot.ylabel(r'$E_0$ (keV)')
     plot.xlabel('Step')
 plot.savefig('emceeRunSampleChainsOut.png',dpi=300)

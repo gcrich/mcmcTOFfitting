@@ -15,6 +15,7 @@
 # TODO: protect against <0 deuteron energy samples?
 #
 
+
 from __future__ import print_function
 import numpy as np
 from numpy import inf
@@ -34,9 +35,11 @@ from math import isnan
 
 
 argParser = argparse.ArgumentParser()
-argParser.add_argument('-run',choices=[0,1,2,3],default=0,type=int)   
+argParser.add_argument('-filename',type=str)
+argParser.add_argument('-e0guess', type=float, default=800.0)
 parsedArgs = argParser.parse_args()
-runNumber = parsedArgs.run
+mp_e0_guess = parsedArgs.e0guess
+filename = parsedArgs.filename
 standoff = {0: distances.tunlSSA_CsI.standoffMid, 
             1: distances.tunlSSA_CsI.standoffClose,
             2: distances.tunlSSA_CsI.standoffClose,
@@ -187,12 +190,31 @@ def lnlikeHelp(evalData, observables):
     handles convolution of beam-timing characteristics with fake data
     then actually does the likelihood eval and returns likelihood value
     """
+    
     logEvalHist = np.log(evalData)
-    zeroObservedIndices = np.where(observables == 0)[0]
-    for idx in zeroObservedIndices:
-        if logEvalHist[idx] == -inf:
-            logEvalHist[zeroObservedIndices] = 0
-
+    for idx,observed in enumerate(observables):
+        if observed == 0 and evalData[idx] == 0:
+            logEvalHist[idx] = 0
+        if observed == 0 and evalData[idx] > 0:
+            logEvalHist[idx] = -inf
+            observables[idx] = 1.0
+        if observed > 0 and evalData[idx] == 0:
+            logEvalHist[idx] = 0
+    print('\n\nEVAL DATA PASSED TO LNLIKEHELP AND ITS LOG\n')
+    for idx,entry in enumerate(evalData):
+        print('{}\t{}'.format(entry, logEvalHist[idx]))
+    #zeroObservedIndices = np.where(observables == 0)[0]
+    #for idx in zeroObservedIndices:
+    #    if logEvalHist[idx] == -inf:
+    #        logEvalHist[zeroObservedIndices] = 0
+#    for idx,logged in enumerate(logEvalHist):
+#        if logged == -inf and observables[idx] == 0:
+#            logEvalHist[idx] = 0.0
+    
+    
+    print('VECS THAT WILL BE DOTTED\nTEST\tOBSERVED\n')
+    for idx,entry in enumerate(logEvalHist):
+        print('{}\t{}'.format(entry, observables[idx]))
     return np.dot(logEvalHist,observables) # returns loglike value
 
 
@@ -255,13 +277,13 @@ def lnprob(theta, observables, standoffDist, tofbinning, tofrange):
 # mp_* are model parameters
 # *_t are 'true' values that go into our fake data
 # *_guess are guesses to start with
-mp_e0_guess = 800 # initial deuteron energy, in keV
+#mp_e0_guess = 800 # initial deuteron energy, in keV
 mp_sigma_0_guess = 0.05 # width of initial deuteron energy spread
 
 
 
 # get the data from file
-tofData = readMultiStandoffTOFdata('/home/gcr/particleyShared/quenchingFactors/tunlCsI_Jan2016/data/CODA/data/multistandoff.dat')
+tofData = readMultiStandoffTOFdata(filename)
 
 
 binEdges = tofData[:,0]
@@ -346,6 +368,7 @@ for idx, dataSet in enumerate(observedTOF):
 testNLL = sum(individualNLLs)
 print('test NLL has value {}'.format(testNLL))
 
+quit()
 
 parameterBounds=[(min_e0,max_e0),(min_sigma_0,max_sigma_0)]
 #minimizedNLL = optimize.minimize(nll, [mp_e0_guess,
@@ -358,7 +381,7 @@ parameterBounds=[(min_e0,max_e0),(min_sigma_0,max_sigma_0)]
 #print(minimizedNLL)
 
 
-nDim, nWalkers = 1, 500
+nDim, nWalkers = 1, 10
 
 e0, sigma0 = mp_e0_guess, mp_sigma_0_guess
 
@@ -370,13 +393,13 @@ sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob,
                                         'standoffDist': standoffs,
                                         'tofbinning': tofRunBins,
                                         'tofrange': tof_range},
-                                threads=7)
+                                threads=3)
 
 
 fout = open('burninchain.dat','w')
 fout.close()
 
-burninSteps = 100
+burninSteps = 10
 print('\n\n\nRUNNING BURN IN WITH {} STEPS\n\n\n'.format(burninSteps))
 
 for i,samplerOut in enumerate(sampler.sample(p0, iterations=burninSteps)):
@@ -407,6 +430,7 @@ else:
 plot.savefig('emceeBurninSampleChainsOut.png',dpi=300)
 plot.draw()
 
+quit()
 
 #sampler.run_mcmc(p0, 500)
 # run with progress updates..

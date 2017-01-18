@@ -130,7 +130,7 @@ def getTOF(mass, energy, distance):
     
     
 def generateModelData(params, standoffDistance, nBins_tof, ddnXSfxn, dedxfxn,
-                      nSamples, getPDF=False):
+                      nSamples, beamTimer, getPDF=False):
     """
     Generate model data with cross-section weighting applied
     ddnXSfxn is an instance of the ddnXSinterpolator class -
@@ -139,22 +139,10 @@ def generateModelData(params, standoffDistance, nBins_tof, ddnXSfxn, dedxfxn,
     one each time
     This is edited to accommodate multiple standoffs being passed 
     """
-    if isinstance(params, Number):
-        e0 = params
-        oneParam = True
-    else:
-        if len(params) == 1:
-            e0 = params[0]
-            oneParam =True
-        else:
-            e0, sigma0 = params
-            oneParam = False
+    e0, sigma0, scaleFactor = params
     dataHist = np.zeros((x_bins, eD_bins))
     nLoops = int(nSamples / nEvPerLoop)
     for loopNum in range(0, nLoops):
-        if oneParam:
-            eZeros = np.repeat(params, nEvPerLoop)
-        else:
             eZeros = np.random.normal( params[0], params[0]*params[1], nEvPerLoop )
         data_eD_matrix = odeint( dedxfxn, eZeros, x_binCenters )
         data_eD = data_eD_matrix.flatten('K')
@@ -174,40 +162,21 @@ def generateModelData(params, standoffDistance, nBins_tof, ddnXSfxn, dedxfxn,
 #    plot.matshow(dataHist)
 #    plot.show()
     drawHist2d = (np.rint(dataHist * nSamples)).astype(int)
-    if isinstance(standoffDistance, Number):
-        tofs = []
-        tofWeights = []
-        for index, weight in np.ndenumerate( drawHist2d ):
-            cellLocation = x_binCenters[index[0]]
-            effectiveDenergy = (e0 + eD_binCenters[index[1]])/2
-            tof_d = getTOF( masses.deuteron, effectiveDenergy, cellLocation )
-            neutronDistance = (distances.tunlSSA_CsI.cellLength - cellLocation +
+    tofs = []
+    tofWeights = []
+    for index, weight in np.ndenumerate( drawHist2d ):
+        cellLocation = x_binCenters[index[0]]
+        effectiveDenergy = (e0 + eD_binCenters[index[1]])/2
+        tof_d = getTOF( masses.deuteron, effectiveDenergy, cellLocation )
+        neutronDistance = (distances.tunlSSA_CsI.cellLength - cellLocation +
                            distances.tunlSSA_CsI.zeroDegLength/2 +
                            standoffDistance )
-            tof_n = getTOF(masses.neutron, eN_binCenters[index[1]], neutronDistance)
-            tofs.append( tof_d + tof_n )
-            tofWeights.append(weight)
-        tofData, tofBinEdges = np.histogram( tofs, bins=tof_nBins, range=tof_range,
+        tof_n = getTOF(masses.neutron, eN_binCenters[index[1]], neutronDistance)
+        tofs.append( tof_d + tof_n )
+        tofWeights.append(weight)
+    tofData, tofBinEdges = np.histogram( tofs, bins=tof_nBins, range=tof_range,
                                         weights=tofWeights, density=getPDF)
-        return tofData
-    tofDataCollection = []
-    for idx,standoff in enumerate(standoffDistance):
-        tofs = []
-        tofWeights = []
-        for index, weight in np.ndenumerate( drawHist2d ):
-            cellLocation = x_binCenters[index[0]]
-            effectiveDenergy = (e0 + eD_binCenters[index[1]])/2
-            tof_d = getTOF( masses.deuteron, effectiveDenergy, cellLocation )
-            neutronDistance = (distances.tunlSSA_CsI.cellLength - cellLocation +
-                               distances.tunlSSA_CsI.zeroDegLength/2 +
-                               standoff )
-            tof_n = getTOF(masses.neutron, eN_binCenters[index[1]], neutronDistance)
-            tofs.append( tof_d + tof_n )
-            tofWeights.append(weight)
-        tofData, tofBinEdges = np.histogram( tofs, bins=nBins_tof[idx], range=tof_range[idx],
-                                        weights=tofWeights, density=getPDF)
-        tofDataCollection.append( tofData )
-    return tofDataCollection
+    return beamTimer.applySpreading(tofData)
 
     
 def lnlikeHelp(evalDataRaw, observables):
@@ -235,45 +204,32 @@ def lnlike(params, observables, standoffDist, tofBinning, nDraws=200000):
     evalDataRaw = generateModelData(params, standoffDist, tofBinning,
                                     ddnXSinstance, stoppingModel.dEdx,
                                     nDraws, True)
-    if not isinstance(observables[0], Number):
-        for idx,obsSet in enumerate(evalDataRaw):
-            loglike = loglike + lnlikeHelp(evalDataRaw[idx], obsSet)
-    else:
-        loglike = lnlikeHelp(evalDataRaw, observables)
-    return loglike
+    loglike = lnlikeHelp(evalDataRaw, observables)
     
     
 
 def lnprior(theta):
-    #print('lnprior function is passed:')
-    #print(theta)
-    if isinstance(theta, Number):
-        if min_e0 < theta < max_e0:
-            return 0
-        return -inf
-    if len(theta) == 1:
-        if min_e0 < theta[0] < max_e0:
-            return 0
-        return -inf
-    if len(theta) > 2: #what?
-        print(theta)
-        return -inf
-    else:
-        e_0, sigma_0 = theta
-        if (min_e0 < e_0 < max_e0 and min_sigma_0 < sigma_0 < max_sigma_0):
-            return 0
-        return -inf
-    return -inf # shouldn't really ever get here, but just in case...
+    e_0, sigma_0 = theta
+    if (min_e0 < e_0 < max_e0 and min_sigma_0 < sigma_0 < max_sigma_0):
+        return 0
+    return -inf
     
-def lnprob(theta, observables, standoffDist, tofbinning):
+def lnprob(theta, observables, standoffDists, tofRanges, nTOFbins):
     """Evaluate the log probability
     theta is a list of the model parameters
-    observables is, in this case, a histogram of TOF values
+        E0, E0_sigma, scaleFactors0-4
+    observables is, in this case, a list of histograms of TOF values
+    
     """
     prior = lnprior(theta)
     if not np.isfinite(prior):
         return -inf
-    logprob = prior + lnlike(theta, observables, standoffDist, tofbinning)
+    loglike = []
+    for idx, obsSet in enumerate(observables):
+        args = theta[:2]
+        args.append(theta[2+idx]) # add scale factor as 3rd parameter for a specific likelihood evaluation
+        loglike.append( lnlike(args, obsSet, standoffDists[idx], tofRanges[idx], nTOFbins[idx]))
+    logprob = prior + np.sum(loglike)
     if isnan(logprob):
         print('\n\n\n\nWARNING\nlogprob evaluated to NaN\nDump of observables and then parameters used for evaluation follow\n\n\n')
         print(observables)
@@ -291,7 +247,7 @@ def lnprob(theta, observables, standoffDist, tofbinning):
 # mp_* are model parameters
 # *_t are 'true' values that go into our fake data
 # *_guess are guesses to start with
-mp_e0_guess = 1200 # initial deuteron energy, in keV
+mp_e0_guess = 1000 # initial deuteron energy, in keV
 mp_sigma_0_guess = 0.05 # width of initial deuteron energy spread
 
 

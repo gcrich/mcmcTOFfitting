@@ -182,7 +182,18 @@ def generateModelData(params, standoffDistance, nBins_tof, range_tof, ddnXSfxn, 
     
     return beamTiming.applySpreading(tofData)
     
-
+#def lnlike_wide(params, observables, templates):
+#    """use a very-wide gaussian error on observed data to try to get things remotely workable"""
+#    modelTOF = buildModelTOF(params, templates)
+#    if not np.isfinite(np.sum(modelTOF)):
+#        return -np.inf
+#    likes = []
+#    for i in range(len(observables)):
+#        if observables[i] == 0:
+#            observables[i] = 1
+#        #likes.append(np.log(poisson.pmf(int(modelTOF[i]), observables[i])))
+#        likes.append(norm.logpdf(modelTOF[i], observables[i], observables[i] * 0.07))
+#    return np.sum(likes)
     
 def lnlikeHelp(evalData, observables):
     """

@@ -5,6 +5,7 @@
 from __future__ import print_function
 import numpy as np
 from numpy import inf
+from numpy.random import choice
 import scipy.optimize as optimize
 from scipy.integrate import odeint
 import matplotlib.pyplot as plt
@@ -139,11 +140,15 @@ plt.plot(steps, probs, color='k', alpha=0.05)
 plt.draw()
 
 # just plot some random parameters
+# first pick the parameters...
+parNums = choice(nParams, size=4, replace=False)
+print('plotting params {}'.format(parNums))
 fig, axes = plt.subplots(4)
-axes[0].plot(steps, chain[:,:,15], color='k', alpha=0.05)
-axes[1].plot(steps, chain[:,:,35], color='k', alpha=0.05)
-axes[2].plot(steps, chain[:,:,55], color='k', alpha=0.05)
-axes[3].plot(steps, chain[:,:,65], color='k', alpha=0.05)
+for ax, parNum in zip(axes,parNums):
+    ax.plot(steps, chain[:,:,parNum], color='k', alpha=0.05)
+#axes[1].plot(steps, chain[:,:,35], color='k', alpha=0.05)
+#axes[2].plot(steps, chain[:,:,55], color='k', alpha=0.05)
+#axes[3].plot(steps, chain[:,:,65], color='k', alpha=0.05)
 plt.draw()
 
 plt.show()

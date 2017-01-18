@@ -560,18 +560,20 @@ sampler = emcee.EnsembleSampler( nWalkers, nDim, lnprob,
                                         'tofbinnings': tofRunBins,
                                         'tofranges': tof_range,
                                         'templates': shapeTemplates},
-                                        threads=7)
+                                        threads=4)
 fout = open('burninchain.dat','w')
 
 
-burninSteps = 500
-for i,samplerOut in enumerate(sampler.sample(p0, iterations=burninSteps, thin=2)):
+burninSteps = 2000
+for i,samplerOut in enumerate(sampler.sample(p0, iterations=burninSteps)):
     burninPos, burninProb, burninRstate = samplerOut
     if i%50 == 0:
         print('burn-in step {} of {}'.format(i, burninSteps))
-    for k in range(burninPos.shape[0]):
-        fout.write('{} {} {}\n'.format(k, burninPos[k], burninProb[k]))
-fout.close()
+    if i%10 == 0: # only save every 10th step
+        fout = open('burninchain.dat','a')
+        for k in range(burninPos.shape[0]):
+            fout.write('{} {} {}\n'.format(k, burninPos[k], burninProb[k]))
+        fout.close()
 
 # get the values to each coefficient...
 coeffVals = []

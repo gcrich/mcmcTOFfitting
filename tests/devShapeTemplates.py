@@ -200,14 +200,14 @@ def generateModelData(params, standoffDistance, nBins_tof, range_tof, ddnXSfxn, 
     dedxfxn is a function used to calculate dEdx -
     probably more efficient to these in rather than reinitializing
     one each time
-    This is edited to accommodate multiple standoffs being passed 
+    params is set of bin boundaries for template energies
     """
-    e0 = params[0]
+    e0, e1 = params
     dataHist = np.zeros((x_bins, eD_bins))
     nLoops = int(nSamples / nEvPerLoop)
     for loopNum in range(0, nLoops):
 #        eZeros = np.repeat(params, nEvPerLoop)
-        eZeros = np.random.uniform(e0-12.5, e0+12.5, nEvPerLoop)
+        eZeros = np.random.uniform(e0, e1, nEvPerLoop)
         data_eD_matrix = odeint( dedxfxn, eZeros, x_binCenters )
         data_eD = data_eD_matrix.flatten('K')
         data_weights = ddnXSfxn.evaluate(data_eD)
@@ -243,12 +243,14 @@ def generateModelData(params, standoffDistance, nBins_tof, range_tof, ddnXSfxn, 
     
     return beamTiming.applySpreading(tofData)
     
-nTemplates_eD = 80
+nTemplates_eD = 32
 templateRange_min_eD, templateRange_max_eD = 400, 1200
 templateRange_eD = (templateRange_min_eD, templateRange_max_eD)
 templateStepSize = (templateRange_max_eD - templateRange_min_eD)/nTemplates_eD
 templateGenVals_eD = np.linspace(templateRange_min_eD+templateStepSize/2, templateRange_max_eD - templateStepSize/2, 
                                  nTemplates_eD, endpoint=True)
+templateEnergyBounds = np.linspace(templateRange_min_eD, templateRange_max_eD,
+                                   nTemplates_eD+1, endpoint=True)
 
 
 def buildModelTOF(coeffs, templates):
@@ -416,8 +418,12 @@ if not loadTemplates:
         for energyIdx, energy in enumerate(templateGenVals_eD):
             # make templates at each standoff
             print('generating template for standoff {} of energy {}, or {} keV'.format(runIndex, energyIdx, energy))
-            model = generateModelData([energy], standoff, tofRunBins[runIndex], tof_range[runIndex], 
-                                                       ddnXSinstance, stoppingModel.dEdx, nSamples, True)
+            model = generateModelData([templateEnergyBounds[energyIdx], 
+                                       templateEnergyBounds[energyIdx+1]], 
+                                        standoff, tofRunBins[runIndex], 
+                                        tof_range[runIndex],
+                                        ddnXSinstance, stoppingModel.dEdx, 
+                                        nSamples, True)
             standoffTemplates.append(model)
             csvWriter.writerow(model)
             #templFile = open(templateFilename, 'a')

@@ -110,7 +110,7 @@ stoppingMedia_Z = 1
 stoppingMedia_A = 2
 stoppingMedia_rho = 8.565e-5 # from red notebook, p 157
 incidentIon_charge = 1
-stoppingMedia_meanExcitation = 19.2
+stoppingMedia_meanExcitation = 19.2*1e-3
 stoppingModelParams = [stoppingMedia_Z, stoppingMedia_A, stoppingMedia_rho,
                        incidentIon_charge, stoppingMedia_meanExcitation]
 stoppingModel = ionStopping.simpleBethe( stoppingModelParams )

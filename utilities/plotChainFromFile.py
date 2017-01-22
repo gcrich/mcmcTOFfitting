@@ -24,16 +24,47 @@ chainFilename = parsedArgs.file
 chainList = []
 probsList = []
 indexList = []
-with open(chainFilename,'r') as f:    
-    for line in f.readlines():
-        trimmedLine = line[line.find('[')+1:line.find(']')].split()
+maxIndex = 0
+with open(chainFilename,'r') as f:
+    line = f.readline()
+    if len(line) == 0:
+        keepReading = False
+    keepReading = True    
+    while keepReading:
+        indexVal = float(line[:line.find('[')])
+        indexList.append(indexVal)
+        if indexVal > maxIndex:
+            maxIndex = indexVal
+        paramWrap = True
         vals = []
+        paramWrap=False
+        endValsIndex = line.find(']')
+        if endValsIndex == -1:
+            # in this case, parameters keep going onto next line
+            endValsIndex = len(line)
+            paramWrap = True
+        trimmedLine = line[line.find('[')+1:endValsIndex].split()
         for valStr in trimmedLine:
             vals.append(float(valStr))
+        while paramWrap:  
+            line = f.readline()
+            endValsIndex = line.find(']')
+            if endValsIndex == -1:
+                # in this case, parameters keep going onto next line
+                endValsIndex = len(line)
+                paramWrap = True
+            else:
+                paramWrap = False
+            trimmedLine = line[:endValsIndex].split()
+            for valStr in trimmedLine:
+                vals.append(float(valStr))
         chainList.append(vals)
         probsList.append(float(line[line.find(']')+1:].rstrip('\n')))
-        indexList.append(float(line[:line.find('[')]))
-        
+        line = f.readline()
+        if len(line) == 0:
+            keepReading = False
+     
+            
 strideChains = []
 probChains = []
 for idx,entry in enumerate(chainList):
@@ -42,7 +73,7 @@ for idx,entry in enumerate(chainList):
         probChainList = []
     probChainList.append(probsList[idx])
     strideChainList.append(entry)
-    if indexList[idx] == max(indexList):
+    if indexList[idx] == maxIndex: #should be == max(indexList)
         strideChains.append(strideChainList)
         probChains.append(probChainList)
         
@@ -62,17 +93,25 @@ plt.plot( steps, probs[:,:], color='k', alpha=0.2)
 plt.ylabel('ln probability')
 plt.xlabel('Step')
 plt.draw()
-#plt.subplot(311)
-#plt.plot(steps, chain[:,:,0], color='k', alpha=0.2)
-#plt.ylabel('$E_0$ (keV)')
-#plt.subplot(312)
-#plt.plot(steps, chain[:,:,1], color='k', alpha=0.2)
-#plt.ylabel('$\sigma_0$')
-#plt.subplot(313)
-#plt.plot(steps, probs[:,:],color='k', alpha=0.2)
-#plt.ylabel('ln probability')
-#plt.xlabel('Step')
-#plt.draw()
+
+plt.figure()
+plt.subplot(311)
+plt.plot(steps, chain[:,:,0], color='k', alpha=0.2)
+plt.ylabel('$E_0$ (keV)')
+plt.subplot(312)
+plt.plot(steps, chain[:,:,1], color='k', alpha=0.2)
+plt.ylabel('$\sigma_0$')
+plt.subplot(313)
+plt.plot(steps, chain[:,:,2],color='k', alpha=0.2)
+plt.ylabel('skew')
+plt.xlabel('Step')
+plt.draw()
+
+plt.figure()
+plt.plot(steps, probs[:,:], color='k', alpha=0.2)
+plt.ylabel('ln prob')
+plt.xlabel('step')
+plt.draw()
         
 paramHists = []
 paramHistBins = []

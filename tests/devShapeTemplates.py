@@ -99,7 +99,7 @@ stoppingMedia_Z = 1
 stoppingMedia_A = 2
 stoppingMedia_rho = 8.565e-5 # from red notebook, p 157
 incidentIon_charge = 1
-stoppingMedia_meanExcitation = 19.2
+stoppingMedia_meanExcitation = 19.2*1e-3
 stoppingModelParams = [stoppingMedia_Z, stoppingMedia_A, stoppingMedia_rho,
                        incidentIon_charge, stoppingMedia_meanExcitation]
 stoppingModel = ionStopping.simpleBethe( stoppingModelParams )
@@ -505,7 +505,7 @@ print('coefficient list length {}, type {}'.format(len(coefficients), type(coeff
 print(coefficients)
 print('constraint list length {}, type {}'.format(len(bounds), type(bounds)))
 print(bounds)
-doML = True
+doML = False
 if doML:
     optimizeRes = optimize.minimize(nll, coefficients, 
                                     args=(observedTOF,standoffs, tofRunBins, tof_range,shapeTemplates ),
@@ -566,11 +566,11 @@ sampler = emcee.EnsembleSampler( nWalkers, nDim, lnprob,
                                         'tofbinnings': tofRunBins,
                                         'tofranges': tof_range,
                                         'templates': shapeTemplates},
-                                        threads=4)
+                                        threads=8)
 fout = open('burninchain.dat','w')
 
 
-burninSteps = 2000
+burninSteps = 10000
 for i,samplerOut in enumerate(sampler.sample(p0, iterations=burninSteps)):
     burninPos, burninProb, burninRstate = samplerOut
     if i%50 == 0:

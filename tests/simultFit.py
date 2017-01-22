@@ -20,6 +20,8 @@ import numpy as np
 from numpy import inf
 import scipy.optimize as optimize
 from scipy.integrate import odeint
+from scipy.stats import (poisson, norm)
+from scipy.stats import skewnorm
 import matplotlib.pyplot as plot
 import emcee
 import csv as csvlib
@@ -93,9 +95,7 @@ nEvPerLoop = 200000
 data_x = np.repeat(x_binCenters,nEvPerLoop)
 
 
-# PARAMETER BOUNDARIES
-min_e0, max_e0 = 100.0,2000.0
-min_sigma_0,max_sigma_0 = 0.001, 0.3
+
 
 
 
@@ -107,10 +107,14 @@ stoppingMedia_Z = 1
 stoppingMedia_A = 2
 stoppingMedia_rho = 8.565e-5 # from red notebook, p 157
 incidentIon_charge = 1
-stoppingMedia_meanExcitation = 19.2
+stoppingMedia_meanExcitation = 19.2*1e-3
+dgas_materialDef = [stoppingMedia_Z, stoppingMedia_A, stoppingMedia_rho, stoppingMedia_meanExcitation]
 stoppingModelParams = [stoppingMedia_Z, stoppingMedia_A, stoppingMedia_rho,
                        incidentIon_charge, stoppingMedia_meanExcitation]
-stoppingModel = ionStopping.simpleBethe( stoppingModelParams )
+#stoppingModel = ionStopping.simpleBethe( stoppingModelParams )
+stoppingModel = ionStopping.simpleBethe([1])
+stoppingModel.addMaterial(dgas_materialDef)
+
 
     
 eN_binCenters = getDDneutronEnergy( eD_binCenters )
@@ -129,8 +133,8 @@ def getTOF(mass, energy, distance):
     return tof
     
     
-def generateModelData(params, standoffDistance, nBins_tof, ddnXSfxn, dedxfxn,
-                      nSamples, beamTimer, getPDF=False):
+def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
+                      dedxfxn, beamTimer, nSamples, getPDF=False):
     """
     Generate model data with cross-section weighting applied
     ddnXSfxn is an instance of the ddnXSinterpolator class -
@@ -139,11 +143,12 @@ def generateModelData(params, standoffDistance, nBins_tof, ddnXSfxn, dedxfxn,
     one each time
     This is edited to accommodate multiple standoffs being passed 
     """
-    e0, sigma0, scaleFactor = params
+    e0, sigma0, skew0, scaleFactor = params
     dataHist = np.zeros((x_bins, eD_bins))
     nLoops = int(nSamples / nEvPerLoop)
     for loopNum in range(0, nLoops):
-            eZeros = np.random.normal( params[0], params[0]*params[1], nEvPerLoop )
+        #eZeros = np.random.normal( params[0], params[0]*params[1], nEvPerLoop )
+        eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=nEvPerLoop)
         data_eD_matrix = odeint( dedxfxn, eZeros, x_binCenters )
         data_eD = data_eD_matrix.flatten('K')
         data_weights = ddnXSfxn.evaluate(data_eD)
@@ -174,12 +179,12 @@ def generateModelData(params, standoffDistance, nBins_tof, ddnXSfxn, dedxfxn,
         tof_n = getTOF(masses.neutron, eN_binCenters[index[1]], neutronDistance)
         tofs.append( tof_d + tof_n )
         tofWeights.append(weight)
-    tofData, tofBinEdges = np.histogram( tofs, bins=tof_nBins, range=tof_range,
+    tofData, tofBinEdges = np.histogram( tofs, bins=nBins_tof, range=range_tof,
                                         weights=tofWeights, density=getPDF)
-    return beamTimer.applySpreading(tofData)
+    return scaleFactor * beamTimer.applySpreading(tofData)
 
     
-def lnlikeHelp(evalDataRaw, observables):
+def lnlikeHelp(evalData, observables):
     """
     helper function for use in lnlike function and its possible parallelization
     handles convolution of beam-timing characteristics with fake data
@@ -195,24 +200,68 @@ def lnlikeHelp(evalDataRaw, observables):
     return np.dot(logEvalHist,observables) # returns loglike value
 
 
-def lnlike(params, observables, standoffDist, tofBinning, nDraws=200000):
+def lnlike(params, observables, standoffDist, range_tof, nBins_tof, 
+           nDraws=200000):
     """
     Evaluate the log likelihood using xs-weighting
     """        
-    loglike = 0
     #e0, sigma0 = params
-    evalDataRaw = generateModelData(params, standoffDist, tofBinning,
+    evalData = generateModelData(params, standoffDist, range_tof, nBins_tof,
                                     ddnXSinstance, stoppingModel.dEdx,
-                                    nDraws, True)
-    loglike = lnlikeHelp(evalDataRaw, observables)
+                                    beamTiming, nDraws, True)
+    binLikelihoods = []
+    for binNum in range(len(observables)):
+        if observables[binNum] == 0:
+            observables[binNum] = 1
+        if evalData[binNum] == 0:
+            evalData[binNum] = 1
+        binLikelihoods.append(norm.logpdf(evalData[binNum], 
+                                          observables[binNum], 
+                                            observables[binNum] * 0.10))
+        binLikelihoods.append(norm.logpdf(observables[binNum],
+                                          evalData[binNum],
+                                            evalData[binNum]*0.15))
+#    print('bin likelihoods {}'.format(binLikelihoods))
+#    print('returning overall likelihood of {}'.format(np.sum(binLikelihoods)))
+    return np.sum(binLikelihoods)
     
     
+def compoundLnlike(params, observables, standoffDists, tofRanges, tofBinnings, 
+                   nDraws=200000):
+    """Compute the joint likelihood of the model with each of the runs at different standoffs"""
+    paramSets = [[params[0], params[1], params[2], scale] for scale in params[3:]]
+    loglike = [lnlike(paramSet, obsSet, standoff, tofrange, tofbin, nDraws) for
+               paramSet, obsSet, standoff, tofrange, tofbin in 
+               zip(paramSets, observables, standoffDists, tofRanges, 
+                   tofBinnings)]
+#    logs = []
+#    for idx, paramSet in enumerate(paramSets):
+#        logs.append(lnlike(paramSet, observables[idx], standoffDists[idx], 
+#                           tofRanges[idx], tofBinnings[idx]))
+#    print('got likelihoods...')
+#    for like in logs:
+#        print(like)
+    return np.sum(loglike)
+    
+    
+    
+# PARAMETER BOUNDARIES
+min_e0, max_e0 = 100.0,2000.0
+min_sigma0, max_sigma0 = 0.001, 0.3
+min_skew0, max_skew0 = -5, 5
+paramRanges = []
+paramRanges.append((min_e0, max_e0))
+paramRanges.append((min_sigma0, max_sigma0))
+paramRanges.append((min_skew0, max_skew0))
+for i in range(4):
+    paramRanges.append( (0.0, 5.0e5) ) # scale factors are all allowed to go between 0 and 30000 for now
 
 def lnprior(theta):
-    e_0, sigma_0 = theta
-    if (min_e0 < e_0 < max_e0 and min_sigma_0 < sigma_0 < max_sigma_0):
-        return 0
-    return -inf
+    # run through list of params and if any are outside of allowed range, immediately return -inf
+    for idx, paramVal in enumerate(theta):
+        if paramVal < paramRanges[idx][0] or paramVal > paramRanges[idx][1]:
+            return -inf
+    return 0
     
 def lnprob(theta, observables, standoffDists, tofRanges, nTOFbins):
     """Evaluate the log probability
@@ -222,14 +271,16 @@ def lnprob(theta, observables, standoffDists, tofRanges, nTOFbins):
     
     """
     prior = lnprior(theta)
+#    for param in theta:
+#        print('param value {}'.format(param))
+#    print('prior has value {}'.format(prior))
     if not np.isfinite(prior):
         return -inf
-    loglike = []
-    for idx, obsSet in enumerate(observables):
-        args = theta[:2]
-        args.append(theta[2+idx]) # add scale factor as 3rd parameter for a specific likelihood evaluation
-        loglike.append( lnlike(args, obsSet, standoffDists[idx], tofRanges[idx], nTOFbins[idx]))
-    logprob = prior + np.sum(loglike)
+    loglike = compoundLnlike(theta, observables, standoffDists, tofRanges, 
+                             nTOFbins)
+#    print('loglike value {}'.format(loglike))
+    logprob = prior + loglike
+#    print('logprob has value {}'.format(logprob))
     if isnan(logprob):
         print('\n\n\n\nWARNING\nlogprob evaluated to NaN\nDump of observables and then parameters used for evaluation follow\n\n\n')
         print(observables)
@@ -241,14 +292,49 @@ def lnprob(theta, observables, standoffDists, tofRanges, nTOFbins):
 
     
     
+def checkLikelihoodEval(observables, evalData):
+    """Verbosely calculate the binned likelhood for a set of observables and model data"""
+    nBins = len(observables)
+    binLikelihoods = []
+    for binNum in range(nBins):
+        if observables[binNum] == 0:
+            print('observable has 0 data in bin {}, setting to 1'.format(binNum))
+            observables[binNum] = 1
+        if evalData[binNum] == 0:
+            print('model has 0 data in bin {}, setting to 1'.format(binNum))
+            evalData[binNum]= 1
+        binlike = observables[binNum] * norm.logpdf(evalData[binNum], 
+                                          observables[binNum], 
+                                            observables[binNum] * 0.10)
+        binlike = binlike + norm.logpdf(observables[binNum],
+                                          evalData[binNum],
+                                            evalData[binNum]*0.15)
+        binLikelihoods.append(observables[binNum]*norm.logpdf(evalData[binNum], 
+                                          observables[binNum], 
+                                            observables[binNum] * 0.10))
+        binLikelihoods.append(norm.logpdf(observables[binNum],
+                                          evalData[binNum],
+                                            evalData[binNum]*0.15))
+        print('bin {} has likelihood {}'.format(binNum, binlike))
+    
+    print('total likelihood is {}'.format(np.sum(binLikelihoods)))
+    
+    simpleIndices = np.arange(nBins)
+    fig, (axOverlay, axResid) = plot.subplots(2)
+    axOverlay.scatter(simpleIndices, observables, color='green')
+    axOverlay.scatter(simpleIndices, evalData, color='red')
+    axOverlay.set_ylabel('Counts')
+    axResid.scatter(simpleIndices, observables - evalData )
+    axResid.set_ylabel('Residual')
+    
+        
+    
+    plot.draw()
+    plot.show()
 
     
     
-# mp_* are model parameters
-# *_t are 'true' values that go into our fake data
-# *_guess are guesses to start with
-mp_e0_guess = 1000 # initial deuteron energy, in keV
-mp_sigma_0_guess = 0.05 # width of initial deuteron energy spread
+
 
 
 
@@ -266,15 +352,46 @@ for i in range(4):
     observedTOF.append(tofData[:,i+1][(binEdges >= tof_minRange[i]) & (binEdges < tof_maxRange[i])])
     observedTOFbinEdges.append(tofData[:,0][(binEdges>=tof_minRange[i])&(binEdges<tof_maxRange[i])])
 
+    
+e0_guess = 800 # initial deuteron energy, in keV
+sigma0_guess = 0.05 # width of initial deuteron energy spread
+skewGuess = -1.5
+paramGuesses = [e0_guess, sigma0_guess, skewGuess]
+scaleFactor_guesses = []
+for i in range(4):
+    scaleFactor_guesses.append(0.7 * np.sum(observedTOF[i]))
+    paramGuesses.append(np.sum(observedTOF[i]))
 
 
+nSamples = 5000
+fakeData1 = generateModelData([e0_guess, sigma0_guess, skewGuess, 5000], 
+                             standoffs[0], tof_range[0], tofRunBins[0], 
+                                ddnXSinstance, stoppingModel.dEdx, beamTiming,
+                                5000, getPDF=True)
+tofbins = np.linspace(tof_minRange[0], tof_maxRange[0], tofRunBins[0])
+plot.figure()
+plot.plot(tofbins, fakeData1)
+plot.draw()
+plot.show()
+    
 
 # generate fake data
 nSamples = 200000
-fakeDataRaw = generateModelData([mp_e0_guess],
-                              standoffs, tofRunBins, 
-                              ddnXSinstance, stoppingModel.dEdx, nSamples)
-fakeData = beamTiming.applySpreading( fakeDataRaw )
+fakeData = [generateModelData([e0_guess, sigma0_guess, skewGuess, sfGuess],
+                              standoff, tofrange, tofbins, 
+                              ddnXSinstance, stoppingModel.dEdx, beamTiming,
+                              nSamples, getPDF=True) for 
+                              sfGuess, standoff, tofrange, tofbins in 
+                              zip(scaleFactor_guesses, standoffs, tof_range,
+                                  tofRunBins)]
+fakeDataOff = [generateModelData([750.0, 0.01, skewGuess, sfGuess],
+                              standoff, tofrange, tofbins, 
+                              ddnXSinstance, stoppingModel.dEdx, beamTiming,
+                              nSamples, getPDF=True) for 
+                              sfGuess, standoff, tofrange, tofbins in 
+                              zip(scaleFactor_guesses, standoffs, tof_range,
+                                  tofRunBins)]
+
 
 
 
@@ -305,8 +422,12 @@ plot.xlabel('TOF (ns)')
 plot.xlim(min(tof_minRange),max(tof_maxRange))
 plot.draw()
 
-plot.show()
-quit()
+
+#checkLikelihoodEval(observedTOF[0], fakeData[0])
+#checkLikelihoodEval(observedTOF[0], fakeDataOff[0])
+
+#plot.show()
+#quit()
 # plot the TOF vs x location
 # again only plot 2000 points
 #plot.figure()
@@ -324,14 +445,20 @@ quit()
 # no real chance of an analytical approach
 # but we can NUMERICALLY attempt to do things
 
-nll = lambda *args: -lnlike(*args)
+nll = lambda *args: -compoundLnlike(*args)
 
 
-testNLL = nll([mp_e0_guess, mp_sigma_0_guess], fakeData, standoffs, tofRunBins)
+testNLL = nll(paramGuesses, observedTOF, standoffs, tof_range, tofRunBins)
 print('test NLL has value {}'.format(testNLL))
 
+testProb = lnprob(paramGuesses, observedTOF, standoffs, tof_range, tofRunBins)
+print('got test lnprob {}'.format(testProb))
 
-parameterBounds=[(min_e0,max_e0),(min_sigma_0,max_sigma_0)]
+plot.show()
+#quit()
+
+
+parameterBounds=[(min_e0,max_e0),(min_sigma0,max_sigma0)]
 #minimizedNLL = optimize.minimize(nll, [mp_e0_guess,
 #                                       mp_e1_guess, mp_e2_guess, 
 #                                       mp_e3_guess, mp_sigma_0_guess,
@@ -342,24 +469,27 @@ parameterBounds=[(min_e0,max_e0),(min_sigma_0,max_sigma_0)]
 #print(minimizedNLL)
 
 
-nDim, nWalkers = 1, 250
+nDim, nWalkers = 7, 100
 
-e0, sigma0 = mp_e0_guess, mp_sigma_0_guess
+e0, sigma0, skew0 = e0_guess, sigma0_guess, skewGuess
+p0agitators = [0.05 * guess for guess in paramGuesses]
 
-#p0 = [np.array([e0 + 50 * np.random.randn(), sigma0 + 1e-2 * np.random.randn()]) for i in range(nWalkers)]
-p0 = [e0 +  100*np.random.randn(nDim) for i in range(nWalkers)]
+#p0 = [np.array([e0 + 50 * np.random.randn(), sigma0 + 1e-2 * np.random.randn(), skew0 +1e-3 * np.random.randn()]) for i in range(nWalkers)]
+p0 = [paramGuesses + p0agitators*np.random.randn(nDim) for i in range(nWalkers)]
+#p0 = [e0 +  100*np.random.randn(nDim) for i in range(nWalkers)]
 #p0 = np.random.uniform(600.0, 1300.0, size=nWalkers)
 sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
                                 kwargs={'observables': observedTOF,
-                                        'standoffDist': standoffs,
-                                        'tofbinning': tofRunBins},
-                                threads=6)
+                                        'standoffDists': standoffs,
+                                        'tofRanges': tof_range,
+                                        'nTOFbins': tofRunBins},
+                                threads=7)
 
 
 fout = open('burninchain.dat','w')
 fout.close()
 
-burninSteps = 50
+burninSteps = 200
 print('\n\n\nRUNNING BURN IN WITH {} STEPS\n\n\n'.format(burninSteps))
 
 for i,samplerOut in enumerate(sampler.sample(p0, iterations=burninSteps)):
@@ -369,8 +499,10 @@ for i,samplerOut in enumerate(sampler.sample(p0, iterations=burninSteps)):
     for k in range(burninPos.shape[0]):
         fout.write("{} {} {}\n".format(k, burninPos[k], burninProb[k]))
     fout.close()
+    
 
-e0_only = True
+    
+e0_only = False
 
 # save an image of the burn in sampling
 if not e0_only:
@@ -390,6 +522,8 @@ else:
 plot.savefig('emceeBurninSampleChainsOut.png',dpi=300)
 plot.draw()
 
+
+quit()
 
 #sampler.run_mcmc(p0, 500)
 # run with progress updates..
@@ -411,12 +545,15 @@ for i,samplerResult in enumerate(sampler.sample(burninPos, lnprob0=burninProb, r
 
 if not e0_only:
     plot.figure()
-    plot.subplot(211)
+    plot.subplot(311)
     plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
     plot.ylabel(r'$E_0$ (keV)')
-    plot.subplot(212)
+    plot.subplot(312)
     plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
     plot.ylabel(r'$\sigma_0$ (keV)')
+    plot.subplot(313)
+    plot.plot(sampler.chain[:,:,2].T,'-',color='k',alpha=0.2)
+    plot.ylabel(r'skew')
     plot.xlabel('Step')
 else:
     plot.figure()
@@ -431,18 +568,19 @@ samples = sampler.chain[:,:,:].reshape((-1,nDim))
 if not e0_only:
     # Compute the quantiles.
     # this comes from https://github.com/dfm/emcee/blob/master/examples/line.py
-    e0_mcmc, sigma_0_mcmc = map(lambda v: (v[1], v[2]-v[1],
+    e0_mcmc, sigma_0_mcmc, skew_mcmc = map(lambda v: (v[1], v[2]-v[1],
                                                                     v[1]-v[0]),
                                                          zip(*np.percentile(samples, [16, 50, 84],
                                                                             axis=0)))
     print("""MCMC result:
         E0 = {0[0]} +{0[1]} -{0[2]}
         sigma_0 = {1[0]} +{1[1]} -{1[2]}
-        """.format(e0_mcmc, sigma_0_mcmc))
+        skew = {2[0]} + {2[1]} - {2[2]}
+        """.format(e0_mcmc, sigma_0_mcmc, skew_mcmc))
     
     
     import corner as corn
-    cornerFig = corn.corner(samples,labels=["$E_0$","$\sigma_0$"],
+    cornerFig = corn.corner(samples,labels=["$E_0$","$\sigma_0$, skew"],
                             quantiles=[0.16,0.5,0.84], show_titles=True,
                             title_kwargs={'fontsize': 12})
     cornerFig.savefig('emceeRunCornerOut.png',dpi=300)

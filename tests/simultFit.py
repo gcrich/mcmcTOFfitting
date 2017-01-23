@@ -452,110 +452,111 @@ nSamples = 200000
 if quitEarly:
     quit()
 
-if debugging and doPlotting:
-    nSamples = 5000
-    fakeData1 = generateModelData([e0_guess, sigma0_guess, skewGuess, 5000], 
-                                 standoffs[0], tof_range[0], tofRunBins[0], 
-                                    ddnXSinstance, stoppingModel.dEdx, beamTiming,
-                                    5000, getPDF=True)
-    tofbins = np.linspace(tof_minRange[0], tof_maxRange[0], tofRunBins[0])
-    plot.figure()
-    plot.plot(tofbins, fakeData1)
-    plot.draw()
-    plot.show()
-        
-
-# generate fake data
-
-
-if not batchMode:
-    fakeData = [generateModelData([e0_guess, sigma0_guess, skewGuess, sfGuess],
-                                  standoff, tofrange, tofbins, 
-                                  ddnXSinstance, stoppingModel.dEdx, beamTiming,
-                                  nSamples, getPDF=True) for 
-                                  sfGuess, standoff, tofrange, tofbins in 
-                                  zip(scaleFactor_guesses, standoffs, tof_range,
-                                      tofRunBins)]
-    fakeDataOff = [generateModelData([e0_bad, sigma0_bad, skew_bad, sfGuess],
-                                  standoff, tofrange, tofbins, 
-                                  ddnXSinstance, stoppingModel.dEdx, beamTiming,
-                                  nSamples, getPDF=True) for 
-                                  sfGuess, standoff, tofrange, tofbins in 
-                                  zip(scaleFactor_guesses, standoffs, tof_range,
-                                      tofRunBins)]
-    
-    
-    
-    
-    # plot the fake data...
-    # but only 2000 points, no need to do more
-    #plot.figure()
-    #plot.scatter(fakeData[:2000,0], fakeData[:2000,2], color='k', alpha=0.3)
-    #plot.xlabel('Cell location (cm)')
-    #plot.ylabel('Neutron energy (keV)')
-    #plot.draw()
-    
-    
-    
-        
-    if doPlotting:
-        # plot the TOF
-       
-        tofbins = []
-        runColors=['#1b9e77','#d95f02','#7570b3','#e7298a']
-        for idx in range(len(tof_minRange)):
-            tofbins.append(np.linspace(tof_minRange[idx], tof_maxRange[idx], tofRunBins[idx]))
+if not useMPI:
+    if debugging and doPlotting:
+        nSamples = 5000
+        fakeData1 = generateModelData([e0_guess, sigma0_guess, skewGuess, 5000], 
+                                     standoffs[0], tof_range[0], tofRunBins[0], 
+                                        ddnXSinstance, stoppingModel.dEdx, beamTiming,
+                                        5000, getPDF=True)
+        tofbins = np.linspace(tof_minRange[0], tof_maxRange[0], tofRunBins[0])
         plot.figure()
-        plot.subplot(211)
-        for i in range(len(tof_minRange)):
-            plot.scatter(tofbins[i], observedTOF[i], color=runColors[i])
-        plot.xlim(min(tof_minRange), max(tof_maxRange))
-        plot.ylabel('Experimental observed counts')
-        plot.title('Observed data and fake data for two parameter sets')
-        plot.subplot(212)
-        for i in range(len(tof_minRange)):
-            plot.scatter(tofbins[i], fakeData[i], color=runColors[i], marker='d')
-            plot.scatter(tofbins[i], fakeDataOff[i], color=runColors[i], marker='+')
-        plot.ylabel('counts')
-        plot.xlabel('TOF (ns)')
-        plot.xlim(min(tof_minRange),max(tof_maxRange))
-        
+        plot.plot(tofbins, fakeData1)
         plot.draw()
-        
         plot.show()
+            
+    
+    # generate fake data
     
     
-    #checkLikelihoodEval(observedTOF[0], fakeData[0])
-    #checkLikelihoodEval(observedTOF[0], fakeDataOff[0])
-    
-    #plot.show()
-    #quit()
-    # plot the TOF vs x location
-    # again only plot 2000 points
-    #plot.figure()
-    #plot.scatter(fakeData[:2000,2],fakeData[:2000,3], color='k', alpha=0.3)
-    #plot.xlabel('Neutron energy (keV)' )
-    #plot.ylabel('TOF (ns)')
-    #plot.draw()
-    
-    ##########################################
-    # here's where things are going to get interesting...
-    # in order to do MCMC, we are going to have to have a log probability fxn
-    # this means, we need a log LIKELIHOOD function, and this means we
-    # need just a regular old pdf
-    # unfortunately, even a regular old PDF is a hideously complicated thing
-    # no real chance of an analytical approach
-    # but we can NUMERICALLY attempt to do things
-    
-    if debugging:
-        nll = lambda *args: -compoundLnlike(*args)
+    if not batchMode:
+        fakeData = [generateModelData([e0_guess, sigma0_guess, skewGuess, sfGuess],
+                                      standoff, tofrange, tofbins, 
+                                      ddnXSinstance, stoppingModel.dEdx, beamTiming,
+                                      nSamples, getPDF=True) for 
+                                      sfGuess, standoff, tofrange, tofbins in 
+                                      zip(scaleFactor_guesses, standoffs, tof_range,
+                                          tofRunBins)]
+        fakeDataOff = [generateModelData([e0_bad, sigma0_bad, skew_bad, sfGuess],
+                                      standoff, tofrange, tofbins, 
+                                      ddnXSinstance, stoppingModel.dEdx, beamTiming,
+                                      nSamples, getPDF=True) for 
+                                      sfGuess, standoff, tofrange, tofbins in 
+                                      zip(scaleFactor_guesses, standoffs, tof_range,
+                                          tofRunBins)]
         
         
-        testNLL = nll(paramGuesses, observedTOF, standoffs, tof_range, tofRunBins)
-        print('test NLL has value {}'.format(testNLL))
         
-        testProb = lnprob(paramGuesses, observedTOF, standoffs, tof_range, tofRunBins)
-        print('got test lnprob {}'.format(testProb))
+        
+        # plot the fake data...
+        # but only 2000 points, no need to do more
+        #plot.figure()
+        #plot.scatter(fakeData[:2000,0], fakeData[:2000,2], color='k', alpha=0.3)
+        #plot.xlabel('Cell location (cm)')
+        #plot.ylabel('Neutron energy (keV)')
+        #plot.draw()
+        
+        
+        
+            
+        if doPlotting:
+            # plot the TOF
+           
+            tofbins = []
+            runColors=['#1b9e77','#d95f02','#7570b3','#e7298a']
+            for idx in range(len(tof_minRange)):
+                tofbins.append(np.linspace(tof_minRange[idx], tof_maxRange[idx], tofRunBins[idx]))
+            plot.figure()
+            plot.subplot(211)
+            for i in range(len(tof_minRange)):
+                plot.scatter(tofbins[i], observedTOF[i], color=runColors[i])
+            plot.xlim(min(tof_minRange), max(tof_maxRange))
+            plot.ylabel('Experimental observed counts')
+            plot.title('Observed data and fake data for two parameter sets')
+            plot.subplot(212)
+            for i in range(len(tof_minRange)):
+                plot.scatter(tofbins[i], fakeData[i], color=runColors[i], marker='d')
+                plot.scatter(tofbins[i], fakeDataOff[i], color=runColors[i], marker='+')
+            plot.ylabel('counts')
+            plot.xlabel('TOF (ns)')
+            plot.xlim(min(tof_minRange),max(tof_maxRange))
+            
+            plot.draw()
+            
+            plot.show()
+        
+        
+        #checkLikelihoodEval(observedTOF[0], fakeData[0])
+        #checkLikelihoodEval(observedTOF[0], fakeDataOff[0])
+        
+        #plot.show()
+        #quit()
+        # plot the TOF vs x location
+        # again only plot 2000 points
+        #plot.figure()
+        #plot.scatter(fakeData[:2000,2],fakeData[:2000,3], color='k', alpha=0.3)
+        #plot.xlabel('Neutron energy (keV)' )
+        #plot.ylabel('TOF (ns)')
+        #plot.draw()
+        
+        ##########################################
+        # here's where things are going to get interesting...
+        # in order to do MCMC, we are going to have to have a log probability fxn
+        # this means, we need a log LIKELIHOOD function, and this means we
+        # need just a regular old pdf
+        # unfortunately, even a regular old PDF is a hideously complicated thing
+        # no real chance of an analytical approach
+        # but we can NUMERICALLY attempt to do things
+        
+        if debugging:
+            nll = lambda *args: -compoundLnlike(*args)
+            
+            
+            testNLL = nll(paramGuesses, observedTOF, standoffs, tof_range, tofRunBins)
+            print('test NLL has value {}'.format(testNLL))
+            
+            testProb = lnprob(paramGuesses, observedTOF, standoffs, tof_range, tofRunBins)
+            print('got test lnprob {}'.format(testProb))
 
 
 #quit()
@@ -609,9 +610,12 @@ else:
                                             'nTOFbins': tofRunBins},
                                     threads=nThreads)
 
-
-fout = open('burninchain.dat','w')
-fout.close()
+if not useMPI:
+    fout = open('burninchain.dat','w')
+    fout.close()
+if useMPI and processPool.is_master():
+    fout = open('burninchain.dat','w')
+    fout.close()
 
 burninSteps = 200
 if debugging:
@@ -619,12 +623,13 @@ if debugging:
 print('\n\n\nRUNNING BURN IN WITH {} STEPS\n\n\n'.format(burninSteps))
 
 for i,samplerOut in enumerate(sampler.sample(p0, iterations=burninSteps)):
-    burninPos, burninProb, burninRstate = samplerOut
-    print('running burn-in step {} of {}...'.format(i, burninSteps))
-    fout = open("burninchain.dat", "a")
-    for k in range(burninPos.shape[0]):
-        fout.write("{} {} {}\n".format(k, burninPos[k], burninProb[k]))
-    fout.close()
+    if not useMPI or processPool.is_master():
+        burninPos, burninProb, burninRstate = samplerOut
+        print('running burn-in step {} of {}...'.format(i, burninSteps))
+        fout = open("burninchain.dat", "a")
+        for k in range(burninPos.shape[0]):
+            fout.write("{} {} {}\n".format(k, burninPos[k], burninProb[k]))
+        fout.close()
     
 
     
@@ -654,8 +659,9 @@ quit()
 
 #sampler.run_mcmc(p0, 500)
 # run with progress updates..
-fout = open('mainchain.dat','w')
-fout.close()
+if not useMPI or processPool.is_master():
+    fout = open('mainchain.dat','w')
+    fout.close()
 
 sampler.reset()
 mcIterations = 100

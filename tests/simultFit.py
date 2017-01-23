@@ -222,8 +222,13 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
         tof_n = getTOF(masses.neutron, eN_binCenters[index[1]], neutronDistance)
         tofs.append( tof_d + tof_n )
         tofWeights.append(weight)
+        # TODO: this next line is the original way of doing this in a modern 
+        # numpy distribution. should really check for version <1.6.1
+        # and if lower than that, use the normed arg, otherwise use density
+#    tofData, tofBinEdges = np.histogram( tofs, bins=nBins_tof, range=range_tof,
+#                                        weights=tofWeights, density=getPDF)
     tofData, tofBinEdges = np.histogram( tofs, bins=nBins_tof, range=range_tof,
-                                        weights=tofWeights, density=getPDF)
+                                        weights=tofWeights, normed=getPDF)
     return scaleFactor * beamTimer.applySpreading(tofData)
 
     

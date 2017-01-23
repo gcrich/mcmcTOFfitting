@@ -21,7 +21,7 @@ from numpy import inf
 import scipy.optimize as optimize
 from scipy.integrate import odeint
 from scipy.stats import (poisson, norm)
-from scipy.stats import skewnorm
+#from scipy.stats import skewnorm
 import sys
 import emcee
 import csv as csvlib
@@ -71,6 +71,15 @@ if sys.version_info[0] < 3 and sys.version_info[1] < 7:
     print('detected python version {0[0]}.{0[1]}, disabling plotting'.format(sys.version_info))
     doPlotting = False
 
+    
+# check for skewnorm distribution in scipy
+try:
+    from scipy.stats import skewnorm
+except ImportError:
+    print('could not load scipy skewnorm distribution - using our own')
+    
+    
+    
 
 standoff = {0: distances.tunlSSA_CsI.standoffMid, 
             1: distances.tunlSSA_CsI.standoffClose,

@@ -379,10 +379,10 @@ def checkLikelihoodEval(observables, evalData):
     binLikelihoods = []
     for binNum in range(nBins):
         if observables[binNum] == 0:
-            print('observable has 0 data in bin {}, setting to 1'.format(binNum))
+            print('observable has 0 data in bin {0}, setting to 1'.format(binNum))
             observables[binNum] = 1
         if evalData[binNum] == 0:
-            print('model has 0 data in bin {}, setting to 1'.format(binNum))
+            print('model has 0 data in bin {0}, setting to 1'.format(binNum))
             evalData[binNum]= 1
         binlike = observables[binNum] * norm.logpdf(evalData[binNum], 
                                           observables[binNum], 
@@ -396,9 +396,9 @@ def checkLikelihoodEval(observables, evalData):
         binLikelihoods.append(norm.logpdf(observables[binNum],
                                           evalData[binNum],
                                             evalData[binNum]*0.15))
-        print('bin {} has likelihood {}'.format(binNum, binlike))
+        print('bin {0} has likelihood {1}'.format(binNum, binlike))
     
-    print('total likelihood is {}'.format(np.sum(binLikelihoods)))
+    print('total likelihood is {0}'.format(np.sum(binLikelihoods)))
     
     simpleIndices = np.arange(nBins)
     fig, (axOverlay, axResid) = plot.subplots(2)
@@ -553,10 +553,10 @@ if not useMPI:
             
             
             testNLL = nll(paramGuesses, observedTOF, standoffs, tof_range, tofRunBins)
-            print('test NLL has value {}'.format(testNLL))
+            print('test NLL has value {0}'.format(testNLL))
             
             testProb = lnprob(paramGuesses, observedTOF, standoffs, tof_range, tofRunBins)
-            print('got test lnprob {}'.format(testProb))
+            print('got test lnprob {0}'.format(testProb))
 
 
 #quit()
@@ -620,15 +620,15 @@ if useMPI and processPool.is_master():
 burninSteps = 200
 if debugging:
     burninSteps = 10
-print('\n\n\nRUNNING BURN IN WITH {} STEPS\n\n\n'.format(burninSteps))
+print('\n\n\nRUNNING BURN IN WITH {0} STEPS\n\n\n'.format(burninSteps))
 
 for i,samplerOut in enumerate(sampler.sample(p0, iterations=burninSteps)):
     if not useMPI or processPool.is_master():
         burninPos, burninProb, burninRstate = samplerOut
-        print('running burn-in step {} of {}...'.format(i, burninSteps))
+        print('running burn-in step {0} of {1}...'.format(i, burninSteps))
         fout = open("burninchain.dat", "a")
         for k in range(burninPos.shape[0]):
-            fout.write("{} {} {}\n".format(k, burninPos[k], burninProb[k]))
+            fout.write("{0} {1} {2}\n".format(k, burninPos[k], burninProb[k]))
         fout.close()
     
 
@@ -670,12 +670,12 @@ if debugging:
 for i,samplerResult in enumerate(sampler.sample(burninPos, lnprob0=burninProb, rstate0=burninRstate, iterations=mcIterations)):
     #if (i+1)%2 == 0:
     #    print("{0:5.1%}".format(float(i)/mcIterations))
-    print('running step {} of {} in main chain'.format(i, mcIterations))
+    print('running step {0} of {1} in main chain'.format(i, mcIterations))
     fout = open('mainchain.dat','a')
     pos=samplerResult[0]
     prob = samplerResult[1]
     for k in range(pos.shape[0]):
-        fout.write("{} {} {}\n".format(k, pos[k], prob[k]))
+        fout.write("{0} {1} {2}\n".format(k, pos[k], prob[k]))
     fout.close()
 
     

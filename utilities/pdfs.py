@@ -6,11 +6,14 @@ import numpy as np
 from scipy.stats import norm
 
 class skewnorm:
-    def pdf(x, loc=0.0, a=0.0, scale=1.0):
+    def __init__(self):
+        """Nothing to really init here..."""
+        
+    def pdf(self, x, loc=0.0, a=0.0, scale=1.0):
         return (2*norm.pdf((x - loc)/scale)*norm.cdf(a * (x-loc)/scale) 
             / scale)
         
-    def rvs(size, a=0.0, loc=0.0, scale=1.0):
+    def rvs(self, size, a=0.0, loc=0.0, scale=1.0):
 #        from scipy source..
 #        u0 = self._random_state.normal(size=self._size)
 #        v = self._random_state.normal(size=self._size)

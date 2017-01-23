@@ -77,7 +77,8 @@ try:
     from scipy.stats import skewnorm
 except ImportError:
     print('could not load scipy skewnorm distribution - using our own')
-    from utilities.pdfs import skewnorm
+    import utilities.pdfs as utePdfs
+    skewnorm = utePdfs.skewnorm()
     
     
 

@@ -43,12 +43,18 @@ argParser.add_argument('-nThreads', default=3, type=int)
 argParser.add_argument('-datafile', default='/home/gcr/particleyShared/quenchingFactors/tunlCsI_Jan2016/data/CODA/data/multistandoff.dat',
                        type=str)
 argParser.add_argument('-quitEarly', choices=[0,1], default=0, type=int)
+argParser.add_argument('-batch',choices=[0,1], default=0, type=int)
 parsedArgs = argParser.parse_args()
 runNumber = parsedArgs.run
 mpiFlag = parsedArgs.mpi
 debugFlag = parsedArgs.debug
 nThreads = parsedArgs.nThreads
 tofDataFilename = parsedArgs.datafile
+
+# batchMode turns off plotting and extraneous stuff like test NLL eval at beginning 
+batchMode = False
+if parsedArgs.batch == 1:
+    batchMode=True
 
 quitEarly = False
 if parsedArgs.quitEarly ==1:
@@ -72,6 +78,8 @@ if useMPI:
 # if using earlier version, we will NOT have matplotlib
 # so, if this is the case, don't do any plotting
 doPlotting = True
+if batchMode:
+    doPlotting = False
 if sys.version_info[0] < 3 and sys.version_info[1] < 7:
     print('detected python version {0[0]}.{0[1]}, disabling plotting'.format(sys.version_info))
     doPlotting = False
@@ -439,90 +447,90 @@ if debugging:
 # generate fake data
 
 
-
-fakeData = [generateModelData([e0_guess, sigma0_guess, skewGuess, sfGuess],
-                              standoff, tofrange, tofbins, 
-                              ddnXSinstance, stoppingModel.dEdx, beamTiming,
-                              nSamples, getPDF=True) for 
-                              sfGuess, standoff, tofrange, tofbins in 
-                              zip(scaleFactor_guesses, standoffs, tof_range,
-                                  tofRunBins)]
-fakeDataOff = [generateModelData([750.0, 0.01, skewGuess, sfGuess],
-                              standoff, tofrange, tofbins, 
-                              ddnXSinstance, stoppingModel.dEdx, beamTiming,
-                              nSamples, getPDF=True) for 
-                              sfGuess, standoff, tofrange, tofbins in 
-                              zip(scaleFactor_guesses, standoffs, tof_range,
-                                  tofRunBins)]
-
-
-
-
-# plot the fake data...
-# but only 2000 points, no need to do more
-#plot.figure()
-#plot.scatter(fakeData[:2000,0], fakeData[:2000,2], color='k', alpha=0.3)
-#plot.xlabel('Cell location (cm)')
-#plot.ylabel('Neutron energy (keV)')
-#plot.draw()
-
-
-
-    
-if doPlotting:
-    # plot the TOF
-    import matplotlib.pyplot as plot
-    tofbins = []
-    runColors=['#1b9e77','#d95f02','#7570b3','#e7298a']
-    for idx in range(len(tof_minRange)):
-        tofbins.append(np.linspace(tof_minRange[idx], tof_maxRange[idx], tofRunBins[idx]))
-    plot.figure()
-    plot.subplot(211)
-    for i in range(len(tof_minRange)):
-        plot.scatter(tofbins[i], observedTOF[i], color=runColors[i])
-    plot.xlim(min(tof_minRange), max(tof_maxRange))
-    plot.subplot(212)
-    for i in range(len(tof_minRange)):
-        plot.scatter(tofbins[i], fakeData[i], color=runColors[i])
-    plot.ylabel('counts')
-    plot.xlabel('TOF (ns)')
-    plot.xlim(min(tof_minRange),max(tof_maxRange))
-    plot.draw()
-    
-    plot.show()
-
-
-#checkLikelihoodEval(observedTOF[0], fakeData[0])
-#checkLikelihoodEval(observedTOF[0], fakeDataOff[0])
-
-#plot.show()
-#quit()
-# plot the TOF vs x location
-# again only plot 2000 points
-#plot.figure()
-#plot.scatter(fakeData[:2000,2],fakeData[:2000,3], color='k', alpha=0.3)
-#plot.xlabel('Neutron energy (keV)' )
-#plot.ylabel('TOF (ns)')
-#plot.draw()
-
-##########################################
-# here's where things are going to get interesting...
-# in order to do MCMC, we are going to have to have a log probability fxn
-# this means, we need a log LIKELIHOOD function, and this means we
-# need just a regular old pdf
-# unfortunately, even a regular old PDF is a hideously complicated thing
-# no real chance of an analytical approach
-# but we can NUMERICALLY attempt to do things
-
-if debugging:
-    nll = lambda *args: -compoundLnlike(*args)
+if not batchMode:
+    fakeData = [generateModelData([e0_guess, sigma0_guess, skewGuess, sfGuess],
+                                  standoff, tofrange, tofbins, 
+                                  ddnXSinstance, stoppingModel.dEdx, beamTiming,
+                                  nSamples, getPDF=True) for 
+                                  sfGuess, standoff, tofrange, tofbins in 
+                                  zip(scaleFactor_guesses, standoffs, tof_range,
+                                      tofRunBins)]
+    fakeDataOff = [generateModelData([750.0, 0.01, skewGuess, sfGuess],
+                                  standoff, tofrange, tofbins, 
+                                  ddnXSinstance, stoppingModel.dEdx, beamTiming,
+                                  nSamples, getPDF=True) for 
+                                  sfGuess, standoff, tofrange, tofbins in 
+                                  zip(scaleFactor_guesses, standoffs, tof_range,
+                                      tofRunBins)]
     
     
-    testNLL = nll(paramGuesses, observedTOF, standoffs, tof_range, tofRunBins)
-    print('test NLL has value {}'.format(testNLL))
     
-    testProb = lnprob(paramGuesses, observedTOF, standoffs, tof_range, tofRunBins)
-    print('got test lnprob {}'.format(testProb))
+    
+    # plot the fake data...
+    # but only 2000 points, no need to do more
+    #plot.figure()
+    #plot.scatter(fakeData[:2000,0], fakeData[:2000,2], color='k', alpha=0.3)
+    #plot.xlabel('Cell location (cm)')
+    #plot.ylabel('Neutron energy (keV)')
+    #plot.draw()
+    
+    
+    
+        
+    if doPlotting:
+        # plot the TOF
+        import matplotlib.pyplot as plot
+        tofbins = []
+        runColors=['#1b9e77','#d95f02','#7570b3','#e7298a']
+        for idx in range(len(tof_minRange)):
+            tofbins.append(np.linspace(tof_minRange[idx], tof_maxRange[idx], tofRunBins[idx]))
+        plot.figure()
+        plot.subplot(211)
+        for i in range(len(tof_minRange)):
+            plot.scatter(tofbins[i], observedTOF[i], color=runColors[i])
+        plot.xlim(min(tof_minRange), max(tof_maxRange))
+        plot.subplot(212)
+        for i in range(len(tof_minRange)):
+            plot.scatter(tofbins[i], fakeData[i], color=runColors[i])
+        plot.ylabel('counts')
+        plot.xlabel('TOF (ns)')
+        plot.xlim(min(tof_minRange),max(tof_maxRange))
+        plot.draw()
+        
+        plot.show()
+    
+    
+    #checkLikelihoodEval(observedTOF[0], fakeData[0])
+    #checkLikelihoodEval(observedTOF[0], fakeDataOff[0])
+    
+    #plot.show()
+    #quit()
+    # plot the TOF vs x location
+    # again only plot 2000 points
+    #plot.figure()
+    #plot.scatter(fakeData[:2000,2],fakeData[:2000,3], color='k', alpha=0.3)
+    #plot.xlabel('Neutron energy (keV)' )
+    #plot.ylabel('TOF (ns)')
+    #plot.draw()
+    
+    ##########################################
+    # here's where things are going to get interesting...
+    # in order to do MCMC, we are going to have to have a log probability fxn
+    # this means, we need a log LIKELIHOOD function, and this means we
+    # need just a regular old pdf
+    # unfortunately, even a regular old PDF is a hideously complicated thing
+    # no real chance of an analytical approach
+    # but we can NUMERICALLY attempt to do things
+    
+    if debugging:
+        nll = lambda *args: -compoundLnlike(*args)
+        
+        
+        testNLL = nll(paramGuesses, observedTOF, standoffs, tof_range, tofRunBins)
+        print('test NLL has value {}'.format(testNLL))
+        
+        testProb = lnprob(paramGuesses, observedTOF, standoffs, tof_range, tofRunBins)
+        print('got test lnprob {}'.format(testProb))
 
 
 #quit()

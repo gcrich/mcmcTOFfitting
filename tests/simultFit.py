@@ -22,7 +22,7 @@ import scipy.optimize as optimize
 from scipy.integrate import odeint
 from scipy.stats import (poisson, norm)
 from scipy.stats import skewnorm
-import matplotlib.pyplot as plot
+import sys
 import emcee
 import csv as csvlib
 import argparse
@@ -37,8 +37,41 @@ from math import isnan
 
 argParser = argparse.ArgumentParser()
 argParser.add_argument('-run',choices=[0,1,2,3],default=0,type=int)   
+argParser.add_argument('-mpi',choices=[0,1], default=0,type=int)
+argParser.add_argument('-debug', choices=[0,1], default=0,type=int)
+argParser.add_argument('-nThreads', default=3, type=int)
+argParser.add_argument('-datafile', default='/home/gcr/particleyShared/quenchingFactors/tunlCsI_Jan2016/data/CODA/data/multistandoff.dat',
+                       type=str)
 parsedArgs = argParser.parse_args()
 runNumber = parsedArgs.run
+mpiFlag = parsedArgs.mpi
+debugFlag = parsedArgs.debug
+nThreads = parsedArgs.nThreads
+tofDataFilename = parsedArgs.datafile
+
+debugging = False
+if debugFlag == 1:
+    debugging = True
+
+useMPI= False
+if mpiFlag == 1:
+    useMPI = True
+    
+if useMPI:
+    from emcee.utils import MPIPool
+    
+    
+    
+####################
+# CHECK TO SEE IF WE ARE USING PYTHON VERSION 2.7 OR ABOVE
+# if using earlier version, we will NOT have matplotlib
+# so, if this is the case, don't do any plotting
+doPlotting = True
+if sys.version_info[0] < 3 and sys.version_info[1] < 7:
+    print('detected python version {0[0]}.{0[1]}, disabling plotting'.format(sys.version_info))
+    doPlotting = False
+
+
 standoff = {0: distances.tunlSSA_CsI.standoffMid, 
             1: distances.tunlSSA_CsI.standoffClose,
             2: distances.tunlSSA_CsI.standoffClose,
@@ -50,6 +83,7 @@ standoffs = [distances.tunlSSA_CsI.standoffMid,
              distances.tunlSSA_CsI.standoffFar]
 
 tofWindowSettings = tofWindows()
+
 ##############
 # vars for binning of TOF 
 # this range covers each of the 4 multi-standoff runs
@@ -215,12 +249,14 @@ def lnlike(params, observables, standoffDist, range_tof, nBins_tof,
             observables[binNum] = 1
         if evalData[binNum] == 0:
             evalData[binNum] = 1
-        binLikelihoods.append(norm.logpdf(evalData[binNum], 
-                                          observables[binNum], 
-                                            observables[binNum] * 0.10))
-        binLikelihoods.append(norm.logpdf(observables[binNum],
-                                          evalData[binNum],
-                                            evalData[binNum]*0.15))
+        binLikelihoods.append(observables[binNum] * poisson.logpmf(int(evalData[binNum]), 
+                                          observables[binNum]))
+#        binLikelihoods.append(norm.logpdf(evalData[binNum], 
+#                                          observables[binNum], 
+#                                            observables[binNum] * 0.10))
+#        binLikelihoods.append(norm.logpdf(observables[binNum],
+#                                          evalData[binNum],
+#                                            evalData[binNum]*0.15))
 #    print('bin likelihoods {}'.format(binLikelihoods))
 #    print('returning overall likelihood of {}'.format(np.sum(binLikelihoods)))
     return np.sum(binLikelihoods)
@@ -339,7 +375,7 @@ def checkLikelihoodEval(observables, evalData):
 
 
 # get the data from file
-tofData = readMultiStandoffTOFdata('/home/gcr/particleyShared/quenchingFactors/tunlCsI_Jan2016/data/CODA/data/multistandoff.dat')
+tofData = readMultiStandoffTOFdata(tofDataFilename)
 
 
 binEdges = tofData[:,0]
@@ -353,30 +389,33 @@ for i in range(4):
     observedTOFbinEdges.append(tofData[:,0][(binEdges>=tof_minRange[i])&(binEdges<tof_maxRange[i])])
 
     
-e0_guess = 800 # initial deuteron energy, in keV
-sigma0_guess = 0.05 # width of initial deuteron energy spread
+e0_guess = 1000 # initial deuteron energy, in keV
+sigma0_guess = 0.1 # width of initial deuteron energy spread
 skewGuess = -1.5
 paramGuesses = [e0_guess, sigma0_guess, skewGuess]
 scaleFactor_guesses = []
 for i in range(4):
     scaleFactor_guesses.append(0.7 * np.sum(observedTOF[i]))
     paramGuesses.append(np.sum(observedTOF[i]))
+nSamples = 200000
 
-
-nSamples = 5000
-fakeData1 = generateModelData([e0_guess, sigma0_guess, skewGuess, 5000], 
-                             standoffs[0], tof_range[0], tofRunBins[0], 
-                                ddnXSinstance, stoppingModel.dEdx, beamTiming,
-                                5000, getPDF=True)
-tofbins = np.linspace(tof_minRange[0], tof_maxRange[0], tofRunBins[0])
-plot.figure()
-plot.plot(tofbins, fakeData1)
-plot.draw()
-plot.show()
-    
+if debugging:
+    nSamples = 5000
+    fakeData1 = generateModelData([e0_guess, sigma0_guess, skewGuess, 5000], 
+                                 standoffs[0], tof_range[0], tofRunBins[0], 
+                                    ddnXSinstance, stoppingModel.dEdx, beamTiming,
+                                    5000, getPDF=True)
+    tofbins = np.linspace(tof_minRange[0], tof_maxRange[0], tofRunBins[0])
+    #plot.figure()
+    #plot.plot(tofbins, fakeData1)
+    #plot.draw()
+    #plot.show()
+        
 
 # generate fake data
-nSamples = 200000
+
+
+
 fakeData = [generateModelData([e0_guess, sigma0_guess, skewGuess, sfGuess],
                               standoff, tofrange, tofbins, 
                               ddnXSinstance, stoppingModel.dEdx, beamTiming,
@@ -404,23 +443,29 @@ fakeDataOff = [generateModelData([750.0, 0.01, skewGuess, sfGuess],
 #plot.draw()
 
 
-# plot the TOF
-tofbins = []
-runColors=['#1b9e77','#d95f02','#7570b3','#e7298a']
-for idx in range(len(tof_minRange)):
-    tofbins.append(np.linspace(tof_minRange[idx], tof_maxRange[idx], tofRunBins[idx]))
-plot.figure()
-plot.subplot(211)
-for i in range(len(tof_minRange)):
-    plot.scatter(tofbins[i], observedTOF[i], color=runColors[i])
-plot.xlim(min(tof_minRange), max(tof_maxRange))
-plot.subplot(212)
-for i in range(len(tof_minRange)):
-    plot.scatter(tofbins[i], fakeData[i], color=runColors[i])
-plot.ylabel('counts')
-plot.xlabel('TOF (ns)')
-plot.xlim(min(tof_minRange),max(tof_maxRange))
-plot.draw()
+
+    
+if doPlotting:
+    # plot the TOF
+    import matplotlib.pyplot as plot
+    tofbins = []
+    runColors=['#1b9e77','#d95f02','#7570b3','#e7298a']
+    for idx in range(len(tof_minRange)):
+        tofbins.append(np.linspace(tof_minRange[idx], tof_maxRange[idx], tofRunBins[idx]))
+    plot.figure()
+    plot.subplot(211)
+    for i in range(len(tof_minRange)):
+        plot.scatter(tofbins[i], observedTOF[i], color=runColors[i])
+    plot.xlim(min(tof_minRange), max(tof_maxRange))
+    plot.subplot(212)
+    for i in range(len(tof_minRange)):
+        plot.scatter(tofbins[i], fakeData[i], color=runColors[i])
+    plot.ylabel('counts')
+    plot.xlabel('TOF (ns)')
+    plot.xlim(min(tof_minRange),max(tof_maxRange))
+    plot.draw()
+    
+    plot.show()
 
 
 #checkLikelihoodEval(observedTOF[0], fakeData[0])
@@ -445,16 +490,17 @@ plot.draw()
 # no real chance of an analytical approach
 # but we can NUMERICALLY attempt to do things
 
-nll = lambda *args: -compoundLnlike(*args)
+if debugging:
+    nll = lambda *args: -compoundLnlike(*args)
+    
+    
+    testNLL = nll(paramGuesses, observedTOF, standoffs, tof_range, tofRunBins)
+    print('test NLL has value {}'.format(testNLL))
+    
+    testProb = lnprob(paramGuesses, observedTOF, standoffs, tof_range, tofRunBins)
+    print('got test lnprob {}'.format(testProb))
 
 
-testNLL = nll(paramGuesses, observedTOF, standoffs, tof_range, tofRunBins)
-print('test NLL has value {}'.format(testNLL))
-
-testProb = lnprob(paramGuesses, observedTOF, standoffs, tof_range, tofRunBins)
-print('got test lnprob {}'.format(testProb))
-
-plot.show()
 #quit()
 
 
@@ -469,27 +515,50 @@ parameterBounds=[(min_e0,max_e0),(min_sigma0,max_sigma0)]
 #print(minimizedNLL)
 
 
-nDim, nWalkers = 7, 100
+nDim, nWalkers = 7, 200
+if debugging:
+    nWalkers = 2 * nDim
 
 e0, sigma0, skew0 = e0_guess, sigma0_guess, skewGuess
-p0agitators = [0.05 * guess for guess in paramGuesses]
+p0agitators = [0.005 * guess for guess in paramGuesses]
 
 #p0 = [np.array([e0 + 50 * np.random.randn(), sigma0 + 1e-2 * np.random.randn(), skew0 +1e-3 * np.random.randn()]) for i in range(nWalkers)]
 p0 = [paramGuesses + p0agitators*np.random.randn(nDim) for i in range(nWalkers)]
 #p0 = [e0 +  100*np.random.randn(nDim) for i in range(nWalkers)]
 #p0 = np.random.uniform(600.0, 1300.0, size=nWalkers)
-sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
-                                kwargs={'observables': observedTOF,
-                                        'standoffDists': standoffs,
-                                        'tofRanges': tof_range,
-                                        'nTOFbins': tofRunBins},
-                                threads=7)
+
+if useMPI:
+    # initialize the MPI pool
+    if debugging:
+        processPool = MPIPool(debug=True)
+    else:
+        processPool = MPIPool()
+    # if not the master, wait for instruction
+    if not processPool.is_master():
+        processPool.wait()
+        sys.exit(0)
+        
+    sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
+                                    kwargs={'observables': observedTOF,
+                                            'standoffDists': standoffs,
+                                            'tofRanges': tof_range,
+                                            'nTOFbins': tofRunBins},
+                                    pool=processPool)
+else:
+    sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
+                                    kwargs={'observables': observedTOF,
+                                            'standoffDists': standoffs,
+                                            'tofRanges': tof_range,
+                                            'nTOFbins': tofRunBins},
+                                    threads=nThreads)
 
 
 fout = open('burninchain.dat','w')
 fout.close()
 
 burninSteps = 200
+if debugging:
+    burninSteps = 10
 print('\n\n\nRUNNING BURN IN WITH {} STEPS\n\n\n'.format(burninSteps))
 
 for i,samplerOut in enumerate(sampler.sample(p0, iterations=burninSteps)):
@@ -504,23 +573,24 @@ for i,samplerOut in enumerate(sampler.sample(p0, iterations=burninSteps)):
     
 e0_only = False
 
-# save an image of the burn in sampling
-if not e0_only:
-    plot.figure()
-    plot.subplot(211)
-    plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
-    plot.ylabel(r'$E_0$ (keV)')
-    plot.subplot(212)
-    plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
-    plot.ylabel(r'$\sigma_0$ (keV)')
-    plot.xlabel('Step')
-else:
-    plot.figure()
-    plot.plot( sampler.chain[:,:,0].T, '-', color='k', alpha=0.2)
-    plot.ylabel(r'$E_0$ (keV)')
-    plot.xlabel('Step')
-plot.savefig('emceeBurninSampleChainsOut.png',dpi=300)
-plot.draw()
+if doPlotting:
+    # save an image of the burn in sampling
+    if not e0_only:
+        plot.figure()
+        plot.subplot(211)
+        plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
+        plot.ylabel(r'$E_0$ (keV)')
+        plot.subplot(212)
+        plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
+        plot.ylabel(r'$\sigma_0$ (keV)')
+        plot.xlabel('Step')
+    else:
+        plot.figure()
+        plot.plot( sampler.chain[:,:,0].T, '-', color='k', alpha=0.2)
+        plot.ylabel(r'$E_0$ (keV)')
+        plot.xlabel('Step')
+    plot.savefig('emceeBurninSampleChainsOut.png',dpi=300)
+    plot.draw()
 
 
 quit()
@@ -532,6 +602,8 @@ fout.close()
 
 sampler.reset()
 mcIterations = 100
+if debugging:
+    mcIterations = 10
 for i,samplerResult in enumerate(sampler.sample(burninPos, lnprob0=burninProb, rstate0=burninRstate, iterations=mcIterations)):
     #if (i+1)%2 == 0:
     #    print("{0:5.1%}".format(float(i)/mcIterations))
@@ -543,25 +615,30 @@ for i,samplerResult in enumerate(sampler.sample(burninPos, lnprob0=burninProb, r
         fout.write("{} {} {}\n".format(k, pos[k], prob[k]))
     fout.close()
 
-if not e0_only:
-    plot.figure()
-    plot.subplot(311)
-    plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
-    plot.ylabel(r'$E_0$ (keV)')
-    plot.subplot(312)
-    plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
-    plot.ylabel(r'$\sigma_0$ (keV)')
-    plot.subplot(313)
-    plot.plot(sampler.chain[:,:,2].T,'-',color='k',alpha=0.2)
-    plot.ylabel(r'skew')
-    plot.xlabel('Step')
-else:
-    plot.figure()
-    plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
-    plot.ylabel(r'$E_0$ (keV)')
-    plot.xlabel('Step')
-plot.savefig('emceeRunSampleChainsOut.png',dpi=300)
-plot.draw()
+    
+if useMPI:
+    processPool.close()
+    
+if doPlotting:
+    if not e0_only:
+        plot.figure()
+        plot.subplot(311)
+        plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
+        plot.ylabel(r'$E_0$ (keV)')
+        plot.subplot(312)
+        plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
+        plot.ylabel(r'$\sigma_0$ (keV)')
+        plot.subplot(313)
+        plot.plot(sampler.chain[:,:,2].T,'-',color='k',alpha=0.2)
+        plot.ylabel(r'skew')
+        plot.xlabel('Step')
+    else:
+        plot.figure()
+        plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
+        plot.ylabel(r'$E_0$ (keV)')
+        plot.xlabel('Step')
+    plot.savefig('emceeRunSampleChainsOut.png',dpi=300)
+    plot.draw()
 
 samples = sampler.chain[:,:,:].reshape((-1,nDim))
 
@@ -579,11 +656,11 @@ if not e0_only:
         """.format(e0_mcmc, sigma_0_mcmc, skew_mcmc))
     
     
-    import corner as corn
-    cornerFig = corn.corner(samples,labels=["$E_0$","$\sigma_0$, skew"],
-                            quantiles=[0.16,0.5,0.84], show_titles=True,
-                            title_kwargs={'fontsize': 12})
-    cornerFig.savefig('emceeRunCornerOut.png',dpi=300)
+#    import corner as corn
+#    cornerFig = corn.corner(samples,labels=["$E_0$","$\sigma_0$, skew"],
+#                            quantiles=[0.16,0.5,0.84], show_titles=True,
+#                            title_kwargs={'fontsize': 12})
+#    cornerFig.savefig('emceeRunCornerOut.png',dpi=300)
 else:
     getQuartilesFromPercentiles = lambda v:(v[1], v[2]-v[1],v[1]-v[0])
 

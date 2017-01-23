@@ -452,7 +452,7 @@ nSamples = 200000
 if quitEarly:
     quit()
 
-if debugging:
+if debugging and doPlotting:
     nSamples = 5000
     fakeData1 = generateModelData([e0_guess, sigma0_guess, skewGuess, 5000], 
                                  standoffs[0], tof_range[0], tofRunBins[0], 

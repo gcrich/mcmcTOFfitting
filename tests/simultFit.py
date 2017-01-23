@@ -42,12 +42,17 @@ argParser.add_argument('-debug', choices=[0,1], default=0,type=int)
 argParser.add_argument('-nThreads', default=3, type=int)
 argParser.add_argument('-datafile', default='/home/gcr/particleyShared/quenchingFactors/tunlCsI_Jan2016/data/CODA/data/multistandoff.dat',
                        type=str)
+argParser.add_argument('-quitEarly', choices=[0,1], default=0, type=int)
 parsedArgs = argParser.parse_args()
 runNumber = parsedArgs.run
 mpiFlag = parsedArgs.mpi
 debugFlag = parsedArgs.debug
 nThreads = parsedArgs.nThreads
 tofDataFilename = parsedArgs.datafile
+
+quitEarly = False
+if parsedArgs.quitEarly ==1:
+    quitEarly= True
 
 debugging = False
 if debugFlag == 1:
@@ -265,8 +270,8 @@ def lnlike(params, observables, standoffDist, range_tof, nBins_tof,
             observables[binNum] = 1
         if evalData[binNum] == 0:
             evalData[binNum] = 1
-        binLikelihoods.append(observables[binNum] * poisson.logpmf(int(evalData[binNum]), 
-                                          observables[binNum]))
+        binLikelihoods.append(observables[binNum] * np.log(poisson.pmf(int(evalData[binNum]), 
+                                          observables[binNum])))
 #        binLikelihoods.append(norm.logpdf(evalData[binNum], 
 #                                          observables[binNum], 
 #                                            observables[binNum] * 0.10))
@@ -414,6 +419,9 @@ for i in range(4):
     scaleFactor_guesses.append(0.7 * np.sum(observedTOF[i]))
     paramGuesses.append(np.sum(observedTOF[i]))
 nSamples = 200000
+
+if quitEarly:
+    quit()
 
 if debugging:
     nSamples = 5000

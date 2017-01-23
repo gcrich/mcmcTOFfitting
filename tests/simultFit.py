@@ -21,6 +21,7 @@ from numpy import inf
 import scipy.optimize as optimize
 from scipy.integrate import odeint
 from scipy.stats import (poisson, norm)
+import scipy.special as special
 #from scipy.stats import skewnorm
 import sys
 import emcee
@@ -44,6 +45,7 @@ argParser.add_argument('-datafile', default='/home/gcr/particleyShared/quenching
                        type=str)
 argParser.add_argument('-quitEarly', choices=[0,1], default=0, type=int)
 argParser.add_argument('-batch',choices=[0,1], default=0, type=int)
+argParser.add_argument('-forceCustomPDF', choices=[0,1], default=0, type=int)
 parsedArgs = argParser.parse_args()
 runNumber = parsedArgs.run
 mpiFlag = parsedArgs.mpi
@@ -60,6 +62,10 @@ quitEarly = False
 if parsedArgs.quitEarly ==1:
     quitEarly= True
 
+forceCustomPDF = False
+if parsedArgs.forceCustomPDF == 1:
+    forceCustomPDF = True
+    
 debugging = False
 if debugFlag == 1:
     debugging = True
@@ -83,15 +89,21 @@ if batchMode:
 if sys.version_info[0] < 3 and sys.version_info[1] < 7:
     print('detected python version {0[0]}.{0[1]}, disabling plotting'.format(sys.version_info))
     doPlotting = False
+if doPlotting:
+    import matplotlib.pyplot as plot
 
     
 # check for skewnorm distribution in scipy
-try:
-    from scipy.stats import skewnorm
-except ImportError:
-    print('could not load scipy skewnorm distribution - using our own')
+if forceCustomPDF:
     import utilities.pdfs as utePdfs
     skewnorm = utePdfs.skewnorm()
+else:
+    try:
+        from scipy.stats import skewnorm
+    except ImportError:
+        print('could not load scipy skewnorm distribution - using our own')
+        import utilities.pdfs as utePdfs
+        skewnorm = utePdfs.skewnorm()
     
     
 
@@ -148,7 +160,7 @@ x_binCenters = np.linspace(x_minRange + x_binSize/2,
                            x_bins)
 
 # parameters for making the fake data...
-nEvPerLoop = 200000
+nEvPerLoop = 50000
 data_x = np.repeat(x_binCenters,nEvPerLoop)
 
 
@@ -202,13 +214,13 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
     """
     e0, sigma0, skew0, scaleFactor = params
     dataHist = np.zeros((x_bins, eD_bins))
-    nLoops = int(nSamples / nEvPerLoop)
+    nLoops = int(np.ceil(nSamples / nEvPerLoop))
     for loopNum in range(0, nLoops):
         #eZeros = np.random.normal( params[0], params[0]*params[1], nEvPerLoop )
         eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=nEvPerLoop)
         data_eD_matrix = odeint( dedxfxn, eZeros, x_binCenters )
-        #data_eD = data_eD_matrix.flatten('K') # this is how i have been doing it..
-        data_eD = data_eD_matrix.ravel()
+        data_eD = data_eD_matrix.flatten('K') # this is how i have been doing it..
+        #data_eD = data_eD_matrix.ravel()
         data_weights = ddnXSfxn.evaluate(data_eD)
 #    print('length of data_x {} length of data_eD {} length of weights {}'.format(
 #          len(data_x), len(data_eD), len(data_weights)))
@@ -278,8 +290,12 @@ def lnlike(params, observables, standoffDist, range_tof, nBins_tof,
             observables[binNum] = 1
         if evalData[binNum] == 0:
             evalData[binNum] = 1
-        binLikelihoods.append(observables[binNum] * np.log(poisson.pmf(int(evalData[binNum]), 
-                                          observables[binNum])))
+# these nexxt two lines are a poor/old man's poisson.logpmf()
+# note that np.log(poisson.pmf()) is NOT THE SAME!
+        poiLogpmf = -observables[binNum] - special.gammaln(int(evalData[binNum])+1)
+        if evalData[binNum] > 0:
+            poiLogpmf = poiLogpmf + evalData[binNum]*np.log(observables[binNum])
+        binLikelihoods.append(observables[binNum] * poiLogpmf)
 #        binLikelihoods.append(norm.logpdf(evalData[binNum], 
 #                                          observables[binNum], 
 #                                            observables[binNum] * 0.10))
@@ -418,14 +434,19 @@ for i in range(4):
     observedTOFbinEdges.append(tofData[:,0][(binEdges>=tof_minRange[i])&(binEdges<tof_maxRange[i])])
 
     
-e0_guess = 1000 # initial deuteron energy, in keV
+e0_guess = 900 # initial deuteron energy, in keV
 sigma0_guess = 0.1 # width of initial deuteron energy spread
 skewGuess = -1.5
+e0_bad = 1000 # initial deuteron energy, in keV
+sigma0_bad = 0.1 # width of initial deuteron energy spread
+skew_bad = -1.5
 paramGuesses = [e0_guess, sigma0_guess, skewGuess]
+badGuesses = [e0_bad, sigma0_bad, skew_bad]
 scaleFactor_guesses = []
 for i in range(4):
     scaleFactor_guesses.append(0.7 * np.sum(observedTOF[i]))
     paramGuesses.append(np.sum(observedTOF[i]))
+    badGuesses.append(np.sum(observedTOF[i]))
 nSamples = 200000
 
 if quitEarly:
@@ -438,10 +459,10 @@ if debugging:
                                     ddnXSinstance, stoppingModel.dEdx, beamTiming,
                                     5000, getPDF=True)
     tofbins = np.linspace(tof_minRange[0], tof_maxRange[0], tofRunBins[0])
-    #plot.figure()
-    #plot.plot(tofbins, fakeData1)
-    #plot.draw()
-    #plot.show()
+    plot.figure()
+    plot.plot(tofbins, fakeData1)
+    plot.draw()
+    plot.show()
         
 
 # generate fake data
@@ -455,7 +476,7 @@ if not batchMode:
                                   sfGuess, standoff, tofrange, tofbins in 
                                   zip(scaleFactor_guesses, standoffs, tof_range,
                                       tofRunBins)]
-    fakeDataOff = [generateModelData([750.0, 0.01, skewGuess, sfGuess],
+    fakeDataOff = [generateModelData([e0_bad, sigma0_bad, skew_bad, sfGuess],
                                   standoff, tofrange, tofbins, 
                                   ddnXSinstance, stoppingModel.dEdx, beamTiming,
                                   nSamples, getPDF=True) for 
@@ -479,7 +500,7 @@ if not batchMode:
         
     if doPlotting:
         # plot the TOF
-        import matplotlib.pyplot as plot
+       
         tofbins = []
         runColors=['#1b9e77','#d95f02','#7570b3','#e7298a']
         for idx in range(len(tof_minRange)):
@@ -489,12 +510,16 @@ if not batchMode:
         for i in range(len(tof_minRange)):
             plot.scatter(tofbins[i], observedTOF[i], color=runColors[i])
         plot.xlim(min(tof_minRange), max(tof_maxRange))
+        plot.ylabel('Experimental observed counts')
+        plot.title('Observed data and fake data for two parameter sets')
         plot.subplot(212)
         for i in range(len(tof_minRange)):
-            plot.scatter(tofbins[i], fakeData[i], color=runColors[i])
+            plot.scatter(tofbins[i], fakeData[i], color=runColors[i], marker='d')
+            plot.scatter(tofbins[i], fakeDataOff[i], color=runColors[i], marker='+')
         plot.ylabel('counts')
         plot.xlabel('TOF (ns)')
         plot.xlim(min(tof_minRange),max(tof_maxRange))
+        
         plot.draw()
         
         plot.show()

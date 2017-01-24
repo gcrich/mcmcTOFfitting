@@ -228,12 +228,12 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
                                                 [x_bins, eD_bins],
                                                 [[x_minRange,x_maxRange],[eD_minRange,eD_maxRange]],
                                                 weights=data_weights)
-        dataHist = np.add(dataHist, dataHist2d)
+        dataHist += dataHist2d # element-wise, in-place addition
             
 #    print('linalg norm value {}'.format(np.linalg.norm(dataHist)))
 #    dataHist = dataHist / np.linalg.norm(dataHist)
 #    print('sum of data hist {}'.format(np.sum(dataHist*eD_binSize*x_binSize)))
-    dataHist = dataHist/ np.sum(dataHist*eD_binSize*x_binSize)
+    dataHist /= np.sum(dataHist*eD_binSize*x_binSize)
 #    plot.matshow(dataHist)
 #    plot.show()
     drawHist2d = (np.rint(dataHist * nSamples)).astype(int)
@@ -294,7 +294,7 @@ def lnlike(params, observables, standoffDist, range_tof, nBins_tof,
 # note that np.log(poisson.pmf()) is NOT THE SAME!
         poiLogpmf = -observables[binNum] - special.gammaln(int(evalData[binNum])+1)
         if evalData[binNum] > 0:
-            poiLogpmf = poiLogpmf + evalData[binNum]*np.log(observables[binNum])
+            poiLogpmf += evalData[binNum]*np.log(observables[binNum])
         binLikelihoods.append(observables[binNum] * poiLogpmf)
 #        binLikelihoods.append(norm.logpdf(evalData[binNum], 
 #                                          observables[binNum], 
@@ -387,7 +387,7 @@ def checkLikelihoodEval(observables, evalData):
         binlike = observables[binNum] * norm.logpdf(evalData[binNum], 
                                           observables[binNum], 
                                             observables[binNum] * 0.10)
-        binlike = binlike + norm.logpdf(observables[binNum],
+        binlike += norm.logpdf(observables[binNum],
                                           evalData[binNum],
                                             evalData[binNum]*0.15)
         binLikelihoods.append(observables[binNum]*norm.logpdf(evalData[binNum], 

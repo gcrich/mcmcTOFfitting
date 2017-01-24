@@ -447,10 +447,10 @@ for i in range(4):
     
 e0_guess = 900 # initial deuteron energy, in keV
 sigma0_guess = 0.1 # width of initial deuteron energy spread
-skewGuess = -1.5
+skewGuess = 0.0
 e0_bad = 1000 # initial deuteron energy, in keV
 sigma0_bad = 0.1 # width of initial deuteron energy spread
-skew_bad = -1.5
+skew_bad = 1
 paramGuesses = [e0_guess, sigma0_guess, skewGuess]
 badGuesses = [e0_bad, sigma0_bad, skew_bad]
 scaleFactor_guesses = []
@@ -590,9 +590,9 @@ if debugging:
 
 e0, sigma0, skew0 = e0_guess, sigma0_guess, skewGuess
 #p0agitators = [0.005 * guess for guess in paramGuesses]
-p0agitators = [20, 0.02, 0.05]
+p0agitators = [50, 0.07, 0.8]
 for guess in paramGuesses[3:]:
-    p0agitators.append(guess * 0.05)
+    p0agitators.append(guess * 0.1)
 
 #p0 = [np.array([e0 + 50 * np.random.randn(), sigma0 + 1e-2 * np.random.randn(), skew0 +1e-3 * np.random.randn()]) for i in range(nWalkers)]
 p0 = [paramGuesses + p0agitators*np.random.randn(nDim) for i in range(nWalkers)]

@@ -34,6 +34,7 @@ from utilities.utilities import (beamTimingShape, ddnXSinterpolator,
 from utilities.utilities import readMultiStandoffTOFdata
 from utilities.ionStopping import ionStopping
 from math import isnan
+import gc
 
 
 argParser = argparse.ArgumentParser()
@@ -229,6 +230,15 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
                                                 [[x_minRange,x_maxRange],[eD_minRange,eD_maxRange]],
                                                 weights=data_weights)
         dataHist += dataHist2d # element-wise, in-place addition
+        
+        # manually manage some memory 
+        del dataHist2d
+        del xedges
+        del yedges
+        del eZeros
+        del data_eD_matrix
+        del data_eD
+        del data_weights
             
 #    print('linalg norm value {}'.format(np.linalg.norm(dataHist)))
 #    dataHist = dataHist / np.linalg.norm(dataHist)
@@ -359,6 +369,7 @@ def lnprob(theta, observables, standoffDists, tofRanges, nTOFbins):
         return -inf
     loglike = compoundLnlike(theta, observables, standoffDists, tofRanges, 
                              nTOFbins)
+    gc.collect()
 #    print('loglike value {}'.format(loglike))
     logprob = prior + loglike
 #    print('logprob has value {}'.format(logprob))

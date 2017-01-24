@@ -589,7 +589,10 @@ if debugging:
     nWalkers = 2 * nDim
 
 e0, sigma0, skew0 = e0_guess, sigma0_guess, skewGuess
-p0agitators = [0.005 * guess for guess in paramGuesses]
+#p0agitators = [0.005 * guess for guess in paramGuesses]
+p0agitators = [20, 0.02, 0.05]
+for guess in paramGuesses[3:]:
+    p0agitators.append(guess * 0.05)
 
 #p0 = [np.array([e0 + 50 * np.random.randn(), sigma0 + 1e-2 * np.random.randn(), skew0 +1e-3 * np.random.randn()]) for i in range(nWalkers)]
 p0 = [paramGuesses + p0agitators*np.random.randn(nDim) for i in range(nWalkers)]
@@ -666,7 +669,6 @@ if doPlotting:
     plot.draw()
 
 
-quit()
 
 #sampler.run_mcmc(p0, 500)
 # run with progress updates..
@@ -675,7 +677,7 @@ if not useMPI or processPool.is_master():
     fout.close()
 
 sampler.reset()
-mcIterations = 100
+mcIterations = 200
 if debugging:
     mcIterations = 10
 for i,samplerResult in enumerate(sampler.sample(burninPos, lnprob0=burninProb, rstate0=burninRstate, iterations=mcIterations)):

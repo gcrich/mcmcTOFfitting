@@ -14,15 +14,21 @@ import numpy as np
 from numpy import inf
 import matplotlib.pyplot as plt
 from scipy.integrate import odeint
-from constants.constants import (masses, distances, physics)
+from constants.constants import (masses, distances, physics, tofWindows)
 from utilities.utilities import (beamTimingShape, ddnXSinterpolator,
-                                 getDDneutronEnergy, readChainFromFile)
+                                 getDDneutronEnergy, readChainFromFile,
+                                 getTOF)
 from utilities.ionStopping import ionStopping
+from scipy.stats import skewnorm
+
+
+
+
 
 class ppcTools:
     """Assist in the sampling of posterior distributions from MCMC TOF fits
     """
-    def __init__(self, chainFilename):
+    def __init__(self, chainFilename, nSamplesFromTOF):
         """Create a PPC tools object - reads in chain from file"""
         self.chain, self.probs, self.nParams, self.nWalkers, self.nSteps = readChainFromFile(chainFilename)
         
@@ -46,13 +52,54 @@ class ppcTools:
                                    self.x_bins)
         
         # parameters for making the fake data...
-        self.nEvPerLoop = 50000
+        self.nEvPerLoop = nSamplesFromTOF
+        self.nSamplesFromTOF = nSamplesFromTOF
         self.data_x = np.repeat(self.x_binCenters, self.nEvPerLoop)
+        
+        
+        self.ddnXSinstance = ddnXSinterpolator()
+        self.beamTiming = beamTimingShape()
+        
+        # stopping power model and parameters
+        stoppingMedia_Z = 1
+        stoppingMedia_A = 2
+        stoppingMedia_rho = 8.565e-5 # from red notebook, p 157
+        incidentIon_charge = 1
+        stoppingMedia_meanExcitation = 19.2*1e-3
+        dgas_materialDef = [stoppingMedia_Z, stoppingMedia_A, stoppingMedia_rho, stoppingMedia_meanExcitation]
+        #stoppingModel = ionStopping.simpleBethe( stoppingModelParams )
+        self.stoppingModel = ionStopping.simpleBethe([incidentIon_charge])
+        self.stoppingModel.addMaterial(dgas_materialDef)
+        
+            
+        self.eN_binCenters = getDDneutronEnergy( self.eD_binCenters )
+        
+        
+        tofWindowSettings = tofWindows()
+        tof_nBins = tofWindowSettings.nBins
+        self.tof_minRange = [tofWindowSettings.minRange['mid'], 
+                        tofWindowSettings.minRange['close'], 
+                        tofWindowSettings.minRange['close'],
+                        tofWindowSettings.minRange['far'] ]
+        self.tof_maxRange = [tofWindowSettings.maxRange['mid'], 
+                        tofWindowSettings.maxRange['close'], 
+                        tofWindowSettings.maxRange['close'],
+                        tofWindowSettings.maxRange['far'] ]
+        self.tof_range = []
+        for i in range(4):
+            self.tof_range.append((self.tof_minRange[i],self.tof_maxRange[i]))
+        self.tofRunBins = [tof_nBins['mid'], tof_nBins['close'], 
+                   tof_nBins['close'], tof_nBins['far']]
+                   
+        self.standoffs = [distances.tunlSSA_CsI.standoffMid, 
+             distances.tunlSSA_CsI.standoffClose,
+             distances.tunlSSA_CsI.standoffClose,
+             distances.tunlSSA_CsI.standoffFar]
         
         
         
     def generateModelData(self, params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
-                      dedxfxn, beamTimer, nSamples, getPDF=False):
+                      dedxfxn, beamTimer, getPDF=False):
         """
         Generate model data with cross-section weighting applied
         ddnXSfxn is an instance of the ddnXSinterpolator class -
@@ -63,17 +110,18 @@ class ppcTools:
         """
         e0, sigma0, skew0, scaleFactor = params
         dataHist = np.zeros((self.x_bins, self.eD_bins))
-        nLoops = int(np.ceil(nSamples / nEvPerLoop))
+        nLoops = int(np.ceil(self.nSamplesFromTOF / self.nEvPerLoop))
         for loopNum in range(0, nLoops):
             #eZeros = np.random.normal( params[0], params[0]*params[1], nEvPerLoop )
-            eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=nEvPerLoop)
+            # TODO: get the number of samples right - doesnt presently divide across multiple loops
+            eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=self.nSamplesFromTOF)
             data_eD_matrix = odeint( dedxfxn, eZeros, self.x_binCenters )
             #data_eD = data_eD_matrix.flatten('K') # this is how i have been doing it..
             data_eD = data_eD_matrix.flatten()
-            data_weights = ddnXSfxn.evaluate(data_eD)
+            data_weights = self.ddnXSinstance.evaluate(data_eD)
     #    print('length of data_x {} length of data_eD {} length of weights {}'.format(
     #          len(data_x), len(data_eD), len(data_weights)))
-            dataHist2d, xedges, yedges = np.histogram2d( self.data_x, self.data_eD,
+            dataHist2d, xedges, yedges = np.histogram2d( self.data_x, data_eD,
                                                     [self.x_bins, self.eD_bins],
                                                     [[self.x_minRange,self.x_maxRange],[self.eD_minRange,self.eD_maxRange]],
                                                     weights=data_weights)
@@ -94,7 +142,7 @@ class ppcTools:
         dataHist /= np.sum(dataHist*self.eD_binSize*self.x_binSize)
     #    plot.matshow(dataHist)
     #    plot.show()
-        drawHist2d = (np.rint(dataHist * self.nSamples)).astype(int)
+        drawHist2d = (np.rint(dataHist * self.nSamplesFromTOF)).astype(int)
         tofs = []
         tofWeights = []
         for index, weight in np.ndenumerate( drawHist2d ):
@@ -104,7 +152,7 @@ class ppcTools:
             neutronDistance = (distances.tunlSSA_CsI.cellLength - cellLocation +
                                distances.tunlSSA_CsI.zeroDegLength/2 +
                                standoffDistance )
-            tof_n = getTOF(masses.neutron, eN_binCenters[index[1]], neutronDistance)
+            tof_n = getTOF(masses.neutron, self.eN_binCenters[index[1]], neutronDistance)
             tofs.append( tof_d + tof_n )
             tofWeights.append(weight)
             # TODO: this next line is the original way of doing this in a modern 
@@ -114,4 +162,35 @@ class ppcTools:
     #                                        weights=tofWeights, density=getPDF)
         tofData, tofBinEdges = np.histogram( tofs, bins=nBins_tof, range=range_tof,
                                             weights=tofWeights, normed=getPDF)
-        return scaleFactor * beamTimer.applySpreading(tofData)
+        return scaleFactor * self.beamTiming.applySpreading(tofData)
+        
+    def generatePPC(self, nChainEntries=500):
+        """Sample from the posterior and produce data in the observable space
+        
+        nChainEntries specifies the number of times to sample the posterior
+        nSamplesFromTOF is the number of deuteron tracks to produce for a given set of parameters
+        """
+        generatedData = []
+        totalChainSamples = len(self.chain[:-20,:,0].flatten())
+        # TODO: this next line could mean we repeat the same sample, i think
+        samplesToGet = np.random.randint(0, totalChainSamples, size=nChainEntries)
+        for sampleToGet in samplesToGet:
+            modelParams = []
+            for nParam in range(self.nParams):
+                modelParams.append(self.chain[:,:,nParam].flatten()[sampleToGet])
+            
+                
+            e0, sigma0, skew0 = modelParams[:3]
+            scaleFactorEntries = modelParams[3:]
+            modelData = [self.generateModelData([e0, sigma0, skew0, scaleFactor],
+                                       standoff, tofrange, tofbins,
+                                       self.ddnXSinstance, self.stoppingModel.dEdx,
+                                       self.beamTiming, True) for
+                                       scaleFactor, standoff, tofrange, tofbins
+                                       in zip(scaleFactorEntries, 
+                                              self.standoffs,
+                                              self.tof_range,
+                                              self.tofRunBins)]
+            generatedData.append(modelData)
+            
+        return generatedData

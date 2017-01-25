@@ -20,7 +20,7 @@ chainFilename = parsedArgs.file
 tofDataFilename = parsedArgs.tofDataFile
 
 ppcTool = ppcTools(chainFilename, nSamplesFromTOF=5000)
-ppc = ppcTool.generatePPC( nChainEntries = 20 )
+ppc = ppcTool.generatePPC( nChainEntries = 50 )
 
 collectedPPCs = [ppc0 for ppc0 in ppc[0]]
 for ppcDataSet in ppc[1:]:
@@ -54,4 +54,5 @@ for idx, ax in enumerate(axes):
     ax.plot(tofXvals[idx], statsAllData[idx][0,:], color='red', alpha=0.4)
     ax.plot(tofXvals[idx], statsAllData[idx][2,:], color='red', alpha=0.4)
 plt.draw()
+plt.savefig('PPC_on_data.png', dpi=400)
 plt.show()

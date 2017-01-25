@@ -15,12 +15,14 @@ import argparse
 argParser = argparse.ArgumentParser()
 argParser.add_argument('-file')
 argParser.add_argument('-tofDataFile')
+argParser.add_arugment('-nParamSamples', default=50, type=int)
 parsedArgs = argParser.parse_args()
 chainFilename = parsedArgs.file
 tofDataFilename = parsedArgs.tofDataFile
+nParamSamples = parsedArgs.nParamSamples
 
 ppcTool = ppcTools(chainFilename, nSamplesFromTOF=5000)
-ppc = ppcTool.generatePPC( nChainEntries = 50 )
+ppc = ppcTool.generatePPC( nChainEntries = nParamSamples )
 
 collectedPPCs = [ppc0 for ppc0 in ppc[0]]
 for ppcDataSet in ppc[1:]:

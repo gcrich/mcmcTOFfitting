@@ -15,7 +15,7 @@ import argparse
 argParser = argparse.ArgumentParser()
 argParser.add_argument('-file')
 argParser.add_argument('-tofDataFile')
-argParser.add_arugment('-nParamSamples', default=50, type=int)
+argParser.add_argument('-nParamSamples', default=50, type=int)
 parsedArgs = argParser.parse_args()
 chainFilename = parsedArgs.file
 tofDataFilename = parsedArgs.tofDataFile

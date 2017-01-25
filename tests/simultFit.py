@@ -219,6 +219,8 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
     for loopNum in range(0, nLoops):
         #eZeros = np.random.normal( params[0], params[0]*params[1], nEvPerLoop )
         eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=nEvPerLoop)
+        while np.isnan(np.sum(eZeros)) or np.isinf(np.sum(eZeros)):
+            eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=nEvPerLoop)
         data_eD_matrix = odeint( dedxfxn, eZeros, x_binCenters )
         #data_eD = data_eD_matrix.flatten('K') # this is how i have been doing it..
         data_eD = data_eD_matrix.flatten()

@@ -15,8 +15,8 @@ import emcee
 import csv as csvlib
 import argparse
 from numbers import Number
+#import readChainFromFile
 from utilities.utilities import readChainFromFile
-
 argParser = argparse.ArgumentParser()
 argParser.add_argument('-file')
 parsedArgs = argParser.parse_args()

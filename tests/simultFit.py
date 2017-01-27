@@ -151,7 +151,7 @@ eD_binCenters = np.linspace(eD_minRange + eD_binSize/2,
                             eD_bins)
 
 
-x_bins = 100
+x_bins = 10
 x_minRange = 0.0
 x_maxRange = distances.tunlSSA_CsI.cellLength
 x_range = (x_minRange,x_maxRange)

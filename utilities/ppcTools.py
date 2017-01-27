@@ -40,7 +40,7 @@ class ppcTools:
         self.eD_binCenters = np.linspace(self.eD_minRange + self.eD_binSize/2,
                                     self.eD_maxRange - self.eD_binSize/2,
                                     self.eD_bins)
-        
+        self.eD_binMax = self.eD_bins - 1
         
         self.x_bins = 100
         self.x_minRange = 0.0
@@ -145,6 +145,8 @@ class ppcTools:
         drawHist2d = (np.rint(dataHist * self.nSamplesFromTOF)).astype(int)
         tofs = []
         tofWeights = []
+        eN_list = []
+        eN_atEachX = np.zeros(self.eD_bins)
         for index, weight in np.ndenumerate( drawHist2d ):
             cellLocation = self.x_binCenters[index[0]]
             effectiveDenergy = (e0 + self.eD_binCenters[index[1]])/2
@@ -155,6 +157,13 @@ class ppcTools:
             tof_n = getTOF(masses.neutron, self.eN_binCenters[index[1]], neutronDistance)
             tofs.append( tof_d + tof_n )
             tofWeights.append(weight)
+            eN_list.append(weight)
+            if index[1] == self.eD_binMax:
+                eN_arr = np.array(eN_list)
+                #print('stack of EN values has shape {0}'.format(eN_atEachX.shape))
+                #print('new EN array to append has shape {0}'.format(eN_arr.shape))
+                eN_atEachX = np.vstack((eN_atEachX, eN_arr))
+                eN_list = []
             # TODO: this next line is the original way of doing this in a modern 
             # numpy distribution. should really check for version <1.6.1
             # and if lower than that, use the normed arg, otherwise use density
@@ -162,7 +171,7 @@ class ppcTools:
     #                                        weights=tofWeights, density=getPDF)
         tofData, tofBinEdges = np.histogram( tofs, bins=nBins_tof, range=range_tof,
                                             weights=tofWeights, normed=getPDF)
-        return scaleFactor * self.beamTiming.applySpreading(tofData)
+        return scaleFactor * self.beamTiming.applySpreading(tofData), eN_atEachX
         
     def generatePPC(self, nChainEntries=500):
         """Sample from the posterior and produce data in the observable space
@@ -171,6 +180,7 @@ class ppcTools:
         nSamplesFromTOF is the number of deuteron tracks to produce for a given set of parameters
         """
         generatedData = []
+        generatedNeutronSpectra=[]
         totalChainSamples = len(self.chain[:-20,:,0].flatten())
         # TODO: this next line could mean we repeat the same sample, i think
         samplesToGet = np.random.randint(0, totalChainSamples, size=nChainEntries)
@@ -182,7 +192,7 @@ class ppcTools:
                 
             e0, sigma0, skew0 = modelParams[:3]
             scaleFactorEntries = modelParams[3:]
-            modelData = [self.generateModelData([e0, sigma0, skew0, scaleFactor],
+            returnedData = [self.generateModelData([e0, sigma0, skew0, scaleFactor],
                                        standoff, tofrange, tofbins,
                                        self.ddnXSinstance, self.stoppingModel.dEdx,
                                        self.beamTiming, True) for
@@ -191,6 +201,13 @@ class ppcTools:
                                               self.standoffs,
                                               self.tof_range,
                                               self.tofRunBins)]
+            # returned data is an array of .. a tuple (modelData, neutronSpectrum)
+            modelData = []
+            modelNeutronSpectrum = []
+            for retDat in returnedData:
+                modelData.append(retDat[0])
+                modelNeutronSpectrum.append(retDat[1])
             generatedData.append(modelData)
+            generatedNeutronSpectra.append(modelNeutronSpectrum)
             
-        return generatedData
+        return generatedData, generatedNeutronSpectra

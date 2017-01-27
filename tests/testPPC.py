@@ -22,7 +22,9 @@ tofDataFilename = parsedArgs.tofDataFile
 nParamSamples = parsedArgs.nParamSamples
 
 ppcTool = ppcTools(chainFilename, nSamplesFromTOF=5000)
-ppc = ppcTool.generatePPC( nChainEntries = nParamSamples )
+#ppc, ppcNeutronSpectra = ppcTool.generatePPC( nChainEntries = nParamSamples )
+returnVal = ppcTool.generatePPC( nChainEntries = nParamSamples )
+ppc = returnVal[0]
 
 collectedPPCs = [ppc0 for ppc0 in ppc[0]]
 for ppcDataSet in ppc[1:]:
@@ -33,6 +35,14 @@ for ppcDataSet in ppc[1:]:
 meansAllData = [np.mean(collectedPPC[:,:],axis=0) for collectedPPC in collectedPPCs]
 statsAllData = [np.percentile(collectedPPC[:,:], [16,50,84], axis=0) for collectedPPC in collectedPPCs]
 
+neutronSpectrumCollection = np.zeros(ppcTool.eD_bins)
+neutronSpecPPCdata = returnVal[1]
+for sampledParamSet in neutronSpecPPCdata:
+    samplesAlongLength = sampledParamSet[0]
+    summedAlongLength = np.sum(samplesAlongLength, axis=0)
+    neutronSpectrumCollection = np.vstack((neutronSpectrumCollection, summedAlongLength))
+neutronSpectrum = np.sum(neutronSpectrumCollection, axis=0)
+neutronStats = np.percentile(neutronSpectrumCollection[1:,:], [16,50,84], axis=0)
                 
  
 # get the data from file
@@ -57,4 +67,16 @@ for idx, ax in enumerate(axes):
     ax.plot(tofXvals[idx], statsAllData[idx][2,:], color='red', alpha=0.4)
 plt.draw()
 plt.savefig('PPC_on_data.png', dpi=400)
+
+
+
+
+eN_xVals = ppcTool.eN_binCenters
+plt.figure()
+plt.plot(eN_xVals, neutronStats[1,:], color='blue' )
+plt.plot(eN_xVals, neutronStats[0,:], color='red', alpha=0.4)
+plt.plot(eN_xVals, neutronStats[2,:], color='red', alpha=0.4)
+plt.draw()
+plt.savefig('PPC_neutronSpec.png', dpi=400)
+
 plt.show()

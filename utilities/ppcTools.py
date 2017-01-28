@@ -19,7 +19,7 @@ from utilities.utilities import (beamTimingShape, ddnXSinterpolator,
                                  getDDneutronEnergy, readChainFromFile,
                                  getTOF)
 from utilities.ionStopping import ionStopping
-from scipy.stats import skewnorm
+from scipy.stats import (skewnorm, norm)
 
 
 
@@ -114,7 +114,11 @@ class ppcTools:
         for loopNum in range(0, nLoops):
             #eZeros = np.random.normal( params[0], params[0]*params[1], nEvPerLoop )
             # TODO: get the number of samples right - doesnt presently divide across multiple loops
-            eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=self.nSamplesFromTOF)
+            try:
+                eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=self.nSamplesFromTOF)
+            except ValueError:
+                print('value error raised in skewnorm.rvs! params {0}, {1}, {2}, nsamples {3}'.format(e0, sigma0, skew0, self.nSamplesFromTOF))
+                eZeros = norm.rvs(loc=e0, scale=e0*sigma0, size=self.nSamplesFromTOF)
             data_eD_matrix = odeint( dedxfxn, eZeros, self.x_binCenters )
             #data_eD = data_eD_matrix.flatten('K') # this is how i have been doing it..
             data_eD = data_eD_matrix.flatten()

@@ -147,6 +147,54 @@ def lnprob(theta, observables):
     return prior + lnlike(theta, observables)
    
     
+    
+
+    
+    
+class zeroDegreeTimingSpread:
+    """Handles timing distribution resulting from transit time across 0degree monitor"""
+    
+    def __init__(self):
+        
+        self.zeroDegDensity_h = 4.82e22 # protons / cm3
+        self.zeroDegLen = distances.tunlSSA_CsI.zeroDegLength
+        self.n0degSegments = 10
+        segWidth = self.zeroDegLen / self.n0degSegments
+        self.xLocs = np.linspace(segWidth/2, self.zeroDegLen - segWidth/2, self.n0degSegments)
+        
+        
+        
+    def getXS_npElasticScatter(self, neutronEnergy):
+        """Get cross section in barns of neutron elastic scattering on H
+        
+        Uses Marion+Young formula
+        """
+        return (4.83 / (np.sqrt(neutronEnergy/1000)) - 0.578) * 1e-24
+        
+    def observationPDF(self, length, neutronEnergy):
+        """PDF defining observation probability along length of detector
+        
+        This is relatively simple - assumes detector is only hydrogen, but uses density equal to correct H density in BC501A"""
+        protonXS = self.getXS_npElasticScatter(neutronEnergy)
+        return np.exp(-1*protonXS * self.zeroDegDensity_h * length)
+        
+    def getTimesAndWeights(self, neutronEnergy):
+        """Get the times and weights of those times to add to TOF collections, representing the PDF across the detector in time"""
+        #protonXS = self.getXS_npElasticScatter(neutronEnergy)
+        
+        tofs = getTOF(masses.neutron, neutronEnergy, self.xLocs)
+        
+        #pdfNormalization = ((1- np.exp(-1*protonXS*self.zeroDegDensity_h*self.zeroDegLen))/(protonXS*self.zeroDegDensity_h))
+        weights = self.observationPDF( self.xLocs, neutronEnergy )
+        norm = np.sum(weights)
+        weights /= norm
+        
+        return tofs, weights
+        
+        
+    
+    
+    
 def readMultiStandoffTOFdata(filename):
     """Read in data from TAC for multiple-standoff runs
     

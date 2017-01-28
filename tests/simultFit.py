@@ -20,7 +20,7 @@ import numpy as np
 from numpy import inf
 import scipy.optimize as optimize
 from scipy.integrate import odeint
-from scipy.stats import (poisson, norm)
+from scipy.stats import (poisson, norm, lognorm)
 import scipy.special as special
 #from scipy.stats import skewnorm
 import sys
@@ -213,14 +213,17 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
     one each time
     This is edited to accommodate multiple standoffs being passed 
     """
-    e0, sigma0, skew0, scaleFactor = params
+    beamE, eLoss, scale, s, scaleFactor = params
+    e0mean = 900.0
     dataHist = np.zeros((x_bins, eD_bins))
     nLoops = int(np.ceil(nSamples / nEvPerLoop))
     for loopNum in range(0, nLoops):
         #eZeros = np.random.normal( params[0], params[0]*params[1], nEvPerLoop )
-        eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=nEvPerLoop)
-        while np.isnan(np.sum(eZeros)) or np.isinf(np.sum(eZeros)):
-            eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=nEvPerLoop)
+        #eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=nEvPerLoop)
+        eZeros = np.repeat(beamE, nEvPerLoop)
+        eZeros -= lognorm.rvs(s=s, loc=eLoss, scale=scale, size=nEvPerLoop)
+#        while np.isnan(np.sum(eZeros)) or np.isinf(np.sum(eZeros)):
+#            eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=nEvPerLoop)
         data_eD_matrix = odeint( dedxfxn, eZeros, x_binCenters )
         #data_eD = data_eD_matrix.flatten('K') # this is how i have been doing it..
         data_eD = data_eD_matrix.flatten()
@@ -232,6 +235,7 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
                                                 [[x_minRange,x_maxRange],[eD_minRange,eD_maxRange]],
                                                 weights=data_weights)
         dataHist += dataHist2d # element-wise, in-place addition
+        e0mean = np.mean(eZeros)
         
         # manually manage some memory 
         del dataHist2d
@@ -253,7 +257,7 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
     tofWeights = []
     for index, weight in np.ndenumerate( drawHist2d ):
         cellLocation = x_binCenters[index[0]]
-        effectiveDenergy = (e0 + eD_binCenters[index[1]])/2
+        effectiveDenergy = (e0mean + eD_binCenters[index[1]])/2
         tof_d = getTOF( masses.deuteron, effectiveDenergy, cellLocation )
         neutronDistance = (distances.tunlSSA_CsI.cellLength - cellLocation +
                            distances.tunlSSA_CsI.zeroDegLength/2 +
@@ -261,13 +265,10 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
         tof_n = getTOF(masses.neutron, eN_binCenters[index[1]], neutronDistance)
         tofs.append( tof_d + tof_n )
         tofWeights.append(weight)
-        # TODO: this next line is the original way of doing this in a modern 
-        # numpy distribution. should really check for version <1.6.1
-        # and if lower than that, use the normed arg, otherwise use density
-#    tofData, tofBinEdges = np.histogram( tofs, bins=nBins_tof, range=range_tof,
-#                                        weights=tofWeights, density=getPDF)
+        # TODO: next line needs adjustment if using OLD NUMPY < 1.6.1 
+        # if lower than that, use the 'normed' arg, rather than 'density'
     tofData, tofBinEdges = np.histogram( tofs, bins=nBins_tof, range=range_tof,
-                                        weights=tofWeights, normed=getPDF)
+                                        weights=tofWeights, density=getPDF)
     return scaleFactor * beamTimer.applySpreading(tofData)
 
     
@@ -277,7 +278,6 @@ def lnlikeHelp(evalData, observables):
     handles convolution of beam-timing characteristics with fake data
     then actually does the likelihood eval and returns likelihood value
     """
-    #evalData = beamTiming.applySpreading( evalDataRaw )
     logEvalHist = np.log(evalData)
     zeroObservedIndices = np.where(observables == 0)[0]
     for idx in zeroObservedIndices:
@@ -322,30 +322,25 @@ def lnlike(params, observables, standoffDist, range_tof, nBins_tof,
 def compoundLnlike(params, observables, standoffDists, tofRanges, tofBinnings, 
                    nDraws=200000):
     """Compute the joint likelihood of the model with each of the runs at different standoffs"""
-    paramSets = [[params[0], params[1], params[2], scale] for scale in params[3:]]
+    paramSets = [[params[0], params[1], params[2], params[3], scale] for scale in params[4:]]
     loglike = [lnlike(paramSet, obsSet, standoff, tofrange, tofbin, nDraws) for
                paramSet, obsSet, standoff, tofrange, tofbin in 
                zip(paramSets, observables, standoffDists, tofRanges, 
                    tofBinnings)]
-#    logs = []
-#    for idx, paramSet in enumerate(paramSets):
-#        logs.append(lnlike(paramSet, observables[idx], standoffDists[idx], 
-#                           tofRanges[idx], tofBinnings[idx]))
-#    print('got likelihoods...')
-#    for like in logs:
-#        print(like)
     return np.sum(loglike)
     
     
     
 # PARAMETER BOUNDARIES
-min_e0, max_e0 = 100.0,2000.0
-min_sigma0, max_sigma0 = 0.001, 0.3
-min_skew0, max_skew0 = -5, 5
+min_beamE, max_beamE = 1825.0, 1925.0 # see lab book pg54, date 1/24/16 - 2070 field of 139.091 mT gives expected Ed = 1.8784 MeV
+min_eLoss, max_eLoss = 600.0,1000.0
+min_scale, max_scale = 40.0, 300.0
+min_s, max_s = 0.1, 1.2
 paramRanges = []
-paramRanges.append((min_e0, max_e0))
-paramRanges.append((min_sigma0, max_sigma0))
-paramRanges.append((min_skew0, max_skew0))
+paramRanges.append((min_beamE, max_beamE))
+paramRanges.append((min_eLoss, max_eLoss))
+paramRanges.append((min_scale, max_scale))
+paramRanges.append((min_s, max_s))
 for i in range(4):
     paramRanges.append( (0.0, 5.0e5) ) # scale factors are all allowed to go between 0 and 30000 for now
 
@@ -447,19 +442,18 @@ for i in range(4):
     observedTOFbinEdges.append(tofData[:,0][(binEdges>=tof_minRange[i])&(binEdges<tof_maxRange[i])])
 
     
-e0_guess = 900 # initial deuteron energy, in keV
-sigma0_guess = 0.1 # width of initial deuteron energy spread
-skewGuess = 0.0
-e0_bad = 1000 # initial deuteron energy, in keV
-sigma0_bad = 0.1 # width of initial deuteron energy spread
-skew_bad = 1
-paramGuesses = [e0_guess, sigma0_guess, skewGuess]
-badGuesses = [e0_bad, sigma0_bad, skew_bad]
+beamE_guess = 1878.4 # initial deuteron energy, in keV
+eLoss_guess = 850.0 # width of initial deuteron energy spread
+scale_guess = 170.0
+s_guess = 0.5
+
+paramGuesses = [beamE_guess, eLoss_guess, scale_guess, s_guess]
+#badGuesses = [e0_bad, sigma0_bad, skew_bad]
 scaleFactor_guesses = []
 for i in range(4):
     scaleFactor_guesses.append(0.7 * np.sum(observedTOF[i]))
     paramGuesses.append(np.sum(observedTOF[i]))
-    badGuesses.append(np.sum(observedTOF[i]))
+    #badGuesses.append(np.sum(observedTOF[i]))
 nSamples = 200000
 
 if quitEarly:
@@ -468,7 +462,7 @@ if quitEarly:
 if not useMPI:
     if debugging and doPlotting:
         nSamples = 5000
-        fakeData1 = generateModelData([e0_guess, sigma0_guess, skewGuess, 5000], 
+        fakeData1 = generateModelData([beamE_guess, eLoss_guess, scale_guess, s_guess, 5000], 
                                      standoffs[0], tof_range[0], tofRunBins[0], 
                                         ddnXSinstance, stoppingModel.dEdx, beamTiming,
                                         5000, getPDF=True)
@@ -483,20 +477,20 @@ if not useMPI:
     
     
     if not batchMode:
-        fakeData = [generateModelData([e0_guess, sigma0_guess, skewGuess, sfGuess],
+        fakeData = [generateModelData([beamE_guess, eLoss_guess, scale_guess, s_guess, sfGuess],
                                       standoff, tofrange, tofbins, 
                                       ddnXSinstance, stoppingModel.dEdx, beamTiming,
                                       nSamples, getPDF=True) for 
                                       sfGuess, standoff, tofrange, tofbins in 
                                       zip(scaleFactor_guesses, standoffs, tof_range,
                                           tofRunBins)]
-        fakeDataOff = [generateModelData([e0_bad, sigma0_bad, skew_bad, sfGuess],
-                                      standoff, tofrange, tofbins, 
-                                      ddnXSinstance, stoppingModel.dEdx, beamTiming,
-                                      nSamples, getPDF=True) for 
-                                      sfGuess, standoff, tofrange, tofbins in 
-                                      zip(scaleFactor_guesses, standoffs, tof_range,
-                                          tofRunBins)]
+#        fakeDataOff = [generateModelData([e0_bad, sigma0_bad, skew_bad, sfGuess],
+#                                      standoff, tofrange, tofbins, 
+#                                      ddnXSinstance, stoppingModel.dEdx, beamTiming,
+#                                      nSamples, getPDF=True) for 
+#                                      sfGuess, standoff, tofrange, tofbins in 
+#                                      zip(scaleFactor_guesses, standoffs, tof_range,
+#                                          tofRunBins)]
         
         
         
@@ -529,7 +523,7 @@ if not useMPI:
             plot.subplot(212)
             for i in range(len(tof_minRange)):
                 plot.scatter(tofbins[i], fakeData[i], color=runColors[i], marker='d')
-                plot.scatter(tofbins[i], fakeDataOff[i], color=runColors[i], marker='+')
+                #plot.scatter(tofbins[i], fakeDataOff[i], color=runColors[i], marker='+')
             plot.ylabel('counts')
             plot.xlabel('TOF (ns)')
             plot.xlim(min(tof_minRange),max(tof_maxRange))
@@ -575,7 +569,7 @@ if not useMPI:
 #quit()
 
 
-parameterBounds=[(min_e0,max_e0),(min_sigma0,max_sigma0)]
+#parameterBounds=[(min_e0,max_e0),(min_sigma0,max_sigma0)]
 #minimizedNLL = optimize.minimize(nll, [mp_e0_guess,
 #                                       mp_e1_guess, mp_e2_guess, 
 #                                       mp_e3_guess, mp_sigma_0_guess,
@@ -586,15 +580,15 @@ parameterBounds=[(min_e0,max_e0),(min_sigma0,max_sigma0)]
 #print(minimizedNLL)
 
 
-nDim, nWalkers = 7, 200
+nDim, nWalkers = 8, 200
 if debugging:
     nWalkers = 2 * nDim
 
-e0, sigma0, skew0 = e0_guess, sigma0_guess, skewGuess
+#e0, sigma0, skew0 = e0_guess, sigma0_guess, skewGuess
 #p0agitators = [0.005 * guess for guess in paramGuesses]
-p0agitators = [50, 0.07, 0.8]
-for guess in paramGuesses[3:]:
-    p0agitators.append(guess * 0.1)
+p0agitators = [10, 50, 20, 0.1]
+for guess in paramGuesses[4:]:
+    p0agitators.append(guess * 0.15)
 
 #p0 = [np.array([e0 + 50 * np.random.randn(), sigma0 + 1e-2 * np.random.randn(), skew0 +1e-3 * np.random.randn()]) for i in range(nWalkers)]
 p0 = [paramGuesses + p0agitators*np.random.randn(nDim) for i in range(nWalkers)]

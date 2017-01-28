@@ -31,6 +31,7 @@ from numbers import Number
 from constants.constants import (masses, distances, physics, tofWindows)
 from utilities.utilities import (beamTimingShape, ddnXSinterpolator, 
                                  getDDneutronEnergy)
+from utilities.utilities import zeroDegreeTimingSpread
 from utilities.utilities import readMultiStandoffTOFdata
 from utilities.ionStopping import ionStopping
 from math import isnan
@@ -141,9 +142,9 @@ for i in range(4):
 tofRunBins = [tof_nBins['mid'], tof_nBins['close'], 
            tof_nBins['close'], tof_nBins['far']]
 
-eD_bins = 150
+eD_bins = 100
 eD_minRange = 200.0
-eD_maxRange = 1700.0
+eD_maxRange = 1200.0
 eD_range = (eD_minRange, eD_maxRange)
 eD_binSize = (eD_maxRange - eD_minRange)/eD_bins
 eD_binCenters = np.linspace(eD_minRange + eD_binSize/2,
@@ -151,7 +152,7 @@ eD_binCenters = np.linspace(eD_minRange + eD_binSize/2,
                             eD_bins)
 
 
-x_bins = 10
+x_bins = 20
 x_minRange = 0.0
 x_maxRange = distances.tunlSSA_CsI.cellLength
 x_range = (x_minRange,x_maxRange)
@@ -171,6 +172,7 @@ data_x = np.repeat(x_binCenters,nEvPerLoop)
 
 ddnXSinstance = ddnXSinterpolator()
 beamTiming = beamTimingShape()
+zeroDegTimeSpreader = zeroDegreeTimingSpread()
 
 # stopping power model and parameters
 stoppingMedia_Z = 1
@@ -260,11 +262,11 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
         effectiveDenergy = (e0mean + eD_binCenters[index[1]])/2
         tof_d = getTOF( masses.deuteron, effectiveDenergy, cellLocation )
         neutronDistance = (distances.tunlSSA_CsI.cellLength - cellLocation +
-                           distances.tunlSSA_CsI.zeroDegLength/2 +
                            standoffDistance )
         tof_n = getTOF(masses.neutron, eN_binCenters[index[1]], neutronDistance)
-        tofs.append( tof_d + tof_n )
-        tofWeights.append(weight)
+        zeroD_times, zeroD_weights = zeroDegTimeSpreader.getTimesAndWeights( eN_binCenters[index[1]] )
+        tofs.append( tof_d + tof_n + zeroD_times )
+        tofWeights.append(weight * zeroD_weights)
         # TODO: next line needs adjustment if using OLD NUMPY < 1.6.1 
         # if lower than that, use the 'normed' arg, rather than 'density'
     tofData, tofBinEdges = np.histogram( tofs, bins=nBins_tof, range=range_tof,

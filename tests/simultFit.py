@@ -77,10 +77,10 @@ useMPI= False
 if nMPInodes > 0:
     useMPI = True
     
-#if useMPI:
-    #from emcee.utils import MPIPool
-import pathos
-import dill
+if useMPI:
+    from emcee.utils import MPIPool
+#import pathos
+#import dill
     
     
     
@@ -673,44 +673,43 @@ p0 = [paramGuesses + p0agitators*np.random.randn(nDim) for i in range(nWalkers)]
 if useMPI:
     # initialize the MPI pool
     if debugging:
-        #processPool = MPIPool(debug=True, loadbalance=True)
-        processPool = pathos.multiprocessing.ProcessingPool(nodes=nMPInodes)
+        processPool = MPIPool(debug=True, loadbalance=True)
+#        processPool = pathos.multiprocessing.ProcessingPool(nodes=nMPInodes)
     else:
-        #processPool = MPIPool(loadbalance=True)
-        processPool = pathos.multiprocessing.ProcessingPool(nodes=nMPInodes)
+        processPool = MPIPool(loadbalance=True)
+#        processPool = pathos.multiprocessing.ProcessingPool(nodes=nMPInodes)
     # if not the master, wait for instruction
-#    if not processPool.is_master():
-#        processPool.wait()
-#        sys.exit(0)
+    if not processPool.is_master():
+        processPool.wait()
+        sys.exit(0)
 #        
-        
-else:
-    processPool = pathos.multiprocessing.ProcessingPool(ncpus=nThreads)
-    
-sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
+    sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
                                 kwargs={'observables': observedTOF,
                                         'standoffDists': standoffs,
                                         'tofRanges': tof_range,
                                         'nTOFbins': tofRunBins},
                              pool=processPool)
 #else:
-#    
-#    sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
-#                                    kwargs={'observables': observedTOF,
-#                                            'standoffDists': standoffs,
-#                                            'tofRanges': tof_range,
-#                                            'nTOFbins': tofRunBins},
-#                                    threads=nThreads)
+#    processPool = pathos.multiprocessing.ProcessingPool(ncpus=nThreads)
+    
+
+else:
+    
+    sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
+                                    kwargs={'observables': observedTOF,
+                                            'standoffDists': standoffs,
+                                            'tofRanges': tof_range,
+                                            'nTOFbins': tofRunBins},
+                                    threads=nThreads)
 
     
-#if not useMPI:
-#    fout = open('burninchain.dat','w')
-#    fout.close()
-#if useMPI and processPool.is_master():
-#    fout = open('burninchain.dat','w')
-#    fout.close()
-fout = open('burninchain.dat','w')
-fout.close()
+if not useMPI:
+    fout = open('burninchain.dat','w')
+    fout.close()
+if useMPI and processPool.is_master():
+    fout = open('burninchain.dat','w')
+    fout.close()
+
 
 burninSteps = 200
 if debugging:

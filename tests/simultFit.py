@@ -619,10 +619,10 @@ if useMPI:
         #processPool = MPIPool(loadbalance=True)
         processPool = pathos.multiprocessing.ProcessingPool(nodes=nMPInodes)
     # if not the master, wait for instruction
-    if not processPool.is_master():
-        processPool.wait()
-        sys.exit(0)
-        
+#    if not processPool.is_master():
+#        processPool.wait()
+#        sys.exit(0)
+#        
         
 else:
     processPool = pathos.multiprocessing.ProcessingPool(ncpus=nThreads)
@@ -643,12 +643,14 @@ sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob,
 #                                    threads=nThreads)
 
     
-if not useMPI:
-    fout = open('burninchain.dat','w')
-    fout.close()
-if useMPI and processPool.is_master():
-    fout = open('burninchain.dat','w')
-    fout.close()
+#if not useMPI:
+#    fout = open('burninchain.dat','w')
+#    fout.close()
+#if useMPI and processPool.is_master():
+#    fout = open('burninchain.dat','w')
+#    fout.close()
+fout = open('burninchain.dat','w')
+fout.close()
 
 burninSteps = 200
 if debugging:

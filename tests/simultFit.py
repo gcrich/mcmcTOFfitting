@@ -397,7 +397,7 @@ def lnlike(params, observables, standoffDist, range_tof, nBins_tof,
     
     
 def compoundLnlike(params, observables, standoffDists, tofRanges, tofBinnings, 
-                   nDraws=200000):
+                   nDraws=100000):
     """Compute the joint likelihood of the model with each of the runs at different standoffs"""
     paramSets = [[params[0], params[1], params[2], params[3], scale] for scale in params[4:]]
     loglike = [lnlike(paramSet, obsSet, standoff, tofrange, tofbin, nDraws) for

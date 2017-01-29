@@ -200,7 +200,17 @@ def getTOF(mass, energy, distance):
     and the distance traveled (in cm).
     Though simple enough to write inline, this will be used often.
     """
-    velocity = physics.speedOfLight * np.sqrt(2 * energy / mass)
+    # TODO: remove the errstate try/except structure
+    # this is in place to debug persistent weird value exception erorrs
+    # seemes to occur elsewhere, though, and NOT in this function
+    # almost certainly, the error catching will add some overhead and slow things down
+    with np.errstate(invalid='raise'):
+        try:
+            velocity = physics.speedOfLight * np.sqrt(2 * energy / mass)
+        except FloatingPointError:
+            print('\n\n\nCAUGHT NUMPY INVALID VALUE ERROR\nDump of energy(ies) follows\n')
+            print(energy)
+            print('\nzero or negative values.. {}'.format(energy[energy <= 0]))
     tof = distance / velocity
     return tof
     
@@ -224,6 +234,14 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
         #eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=nEvPerLoop)
         eZeros = np.repeat(beamE, nEvPerLoop)
         eZeros -= lognorm.rvs(s=s, loc=eLoss, scale=scale, size=nEvPerLoop)
+        checkForBadEs = True
+        while checkForBadEs:
+            badIdxs = np.where(eZeros <= 0.0)[0]
+            nBads = badIdxs.shape[0]
+            if nBads == 0:
+                checkForBadEs = False
+            replacements = np.repeat(beamE, nBads) - lognorm.rvs(s=s, loc=eLoss, scale=scale, size=nBads)
+            eZeros[badIdxs] = replacements
 #        while np.isnan(np.sum(eZeros)) or np.isinf(np.sum(eZeros)):
 #            eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=nEvPerLoop)
         data_eD_matrix = odeint( dedxfxn, eZeros, x_binCenters )

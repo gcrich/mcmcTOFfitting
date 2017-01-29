@@ -145,7 +145,7 @@ for i in range(4):
 tofRunBins = [tof_nBins['mid'], tof_nBins['close'], 
            tof_nBins['close'], tof_nBins['far']]
 
-eD_bins = 100
+eD_bins = 50
 eD_minRange = 200.0
 eD_maxRange = 1200.0
 eD_range = (eD_minRange, eD_maxRange)
@@ -155,7 +155,7 @@ eD_binCenters = np.linspace(eD_minRange + eD_binSize/2,
                             eD_bins)
 
 
-x_bins = 20
+x_bins = 10
 x_minRange = 0.0
 x_maxRange = distances.tunlSSA_CsI.cellLength
 x_range = (x_minRange,x_maxRange)
@@ -165,7 +165,7 @@ x_binCenters = np.linspace(x_minRange + x_binSize/2,
                            x_bins)
 
 # parameters for making the fake data...
-nEvPerLoop = 50000
+nEvPerLoop = 500
 data_x = np.repeat(x_binCenters,nEvPerLoop)
 
 
@@ -298,6 +298,8 @@ def genModelData_lowMem(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn
     beamE, eLoss, scale, s, scaleFactor = params
     dataHist = np.zeros((x_bins, eD_bins))
     for sampleNum in range(nSamples):
+#        if sampleNum % 1000 == 0:
+#            print('on sample {0}'.format(sampleNum))
         #eZeros = np.random.normal( params[0], params[0]*params[1], nEvPerLoop )
         #eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=nEvPerLoop)
         eZero = beamE - lognorm.rvs(s=s, loc=eLoss, scale=scale, size=1)[0]
@@ -368,7 +370,7 @@ def lnlike(params, observables, standoffDist, range_tof, nBins_tof,
     Evaluate the log likelihood using xs-weighting
     """        
     #e0, sigma0 = params
-    evalData = genModelData_lowMem(params, standoffDist, range_tof, nBins_tof,
+    evalData = generateModelData(params, standoffDist, range_tof, nBins_tof,
                                     ddnXSinstance, stoppingModel.dEdx,
                                     beamTiming, nDraws, True)
     binLikelihoods = []

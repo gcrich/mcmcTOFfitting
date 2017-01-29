@@ -69,9 +69,15 @@ class ionStopping:
         def dEdx(self, energy, x=0):
             """Calculate the stopping power at a given energy (in keV/cm)"""
 #            print('params:\nproton number {}\nA {}\nrho {}\ncharge {}\nI {}\nn Density {}'.format(self.protonNumber, self.massNumber, self.density, self.ionCharge, self.iExcitation, self.numDensity))
-            velocity = (np.sqrt(2 * energy / masses.deuteron) *
-                        physics.speedOfLight)
-#            print('velocity for energy {} is {}'.format(energy,velocity))
+            with np.errstate(invalid='raise'):
+                try:
+                    velocity = (np.sqrt(2 * energy / masses.deuteron) *
+                                physics.speedOfLight)
+    #            print('velocity for energy {} is {}'.format(energy,velocity))
+                except FloatingPointError:
+                    print('\n\n\nCAUGHT NUMPY INVALID VALUE ERROR IN DEDX\nDump of energy(ies) follows\n')
+                    print(energy)
+                    print('\nzero or negative values.. {}'.format(energy[energy <= 0]))
             leadingTerm = ( 4 * np.pi * self.ionCharge**2 /
                            (masses.electron * physics.speedOfLight**2 *
                            velocity**2))

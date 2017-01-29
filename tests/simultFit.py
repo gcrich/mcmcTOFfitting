@@ -36,6 +36,7 @@ from utilities.utilities import readMultiStandoffTOFdata
 from utilities.ionStopping import ionStopping
 from math import isnan
 import gc
+import pathos
 
 
 argParser = argparse.ArgumentParser()

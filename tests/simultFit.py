@@ -287,6 +287,66 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
     return scaleFactor * beamTimer.applySpreading(tofData)
 
     
+
+def genModelData_lowMem(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
+                      dedxfxn, beamTimer, nSamples, getPDF=False):
+    """
+    Generate model data with cross-section weighting applied
+    
+    this iterates more simply, trying to avoid memory mishaps
+    """
+    beamE, eLoss, scale, s, scaleFactor = params
+    dataHist = np.zeros((x_bins, eD_bins))
+    for sampleNum in range(nSamples):
+        #eZeros = np.random.normal( params[0], params[0]*params[1], nEvPerLoop )
+        #eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=nEvPerLoop)
+        eZero = beamE - lognorm.rvs(s=s, loc=eLoss, scale=scale, size=1)[0]
+        checkForBadEs = False
+        if eZero <= 0:
+            checkForBadEs = True
+        while checkForBadEs:
+            eZero = beamE - lognorm.rvs(s=s, loc=eLoss, scale=scale, size=1)[0]
+            if eZero <= 0:
+                checkForBadEs = True
+
+        data_eD_matrix = odeint( dedxfxn, eZero, x_binCenters )
+        data_eD = data_eD_matrix.flatten()
+        data_weights = ddnXSfxn.evaluate(data_eD)
+#        print('length of data_x {} length of data_eD {} length of weights {}'.format(
+#              len(data_x), len(data_eD), len(data_weights)))
+        dataHist2d, xedges, yedges = np.histogram2d( x_binCenters, data_eD,
+                                                [x_bins, eD_bins],
+                                                [[x_minRange,x_maxRange],[eD_minRange,eD_maxRange]],
+                                                weights=data_weights)
+        dataHist += dataHist2d # element-wise, in-place addition
+        
+    e0mean = np.mean(beamE - lognorm.rvs(s=s, loc=eLoss, scale=scale, size=1000))       
+#    print('linalg norm value {}'.format(np.linalg.norm(dataHist)))
+#    dataHist = dataHist / np.linalg.norm(dataHist)
+#    print('sum of data hist {}'.format(np.sum(dataHist*eD_binSize*x_binSize)))
+    dataHist /= np.sum(dataHist*eD_binSize*x_binSize)
+#    plot.matshow(dataHist)
+#    plot.show()
+    drawHist2d = (np.rint(dataHist * nSamples)).astype(int)
+    tofs = []
+    tofWeights = []
+    for index, weight in np.ndenumerate( drawHist2d ):
+        cellLocation = x_binCenters[index[0]]
+        effectiveDenergy = (e0mean + eD_binCenters[index[1]])/2
+        tof_d = getTOF( masses.deuteron, effectiveDenergy, cellLocation )
+        neutronDistance = (distances.tunlSSA_CsI.cellLength - cellLocation +
+                           standoffDistance )
+        tof_n = getTOF(masses.neutron, eN_binCenters[index[1]], neutronDistance)
+        zeroD_times, zeroD_weights = zeroDegTimeSpreader.getTimesAndWeights( eN_binCenters[index[1]] )
+        tofs.append( tof_d + tof_n + zeroD_times )
+        tofWeights.append(weight * zeroD_weights)
+        # TODO: next line needs adjustment if using OLD NUMPY < 1.6.1 
+        # if lower than that, use the 'normed' arg, rather than 'density'
+    tofData, tofBinEdges = np.histogram( tofs, bins=nBins_tof, range=range_tof,
+                                        weights=tofWeights, density=getPDF)
+    return scaleFactor * beamTimer.applySpreading(tofData)    
+
+    
 def lnlikeHelp(evalData, observables):
     """
     helper function for use in lnlike function and its possible parallelization
@@ -308,7 +368,7 @@ def lnlike(params, observables, standoffDist, range_tof, nBins_tof,
     Evaluate the log likelihood using xs-weighting
     """        
     #e0, sigma0 = params
-    evalData = generateModelData(params, standoffDist, range_tof, nBins_tof,
+    evalData = genModelData_lowMem(params, standoffDist, range_tof, nBins_tof,
                                     ddnXSinstance, stoppingModel.dEdx,
                                     beamTiming, nDraws, True)
     binLikelihoods = []

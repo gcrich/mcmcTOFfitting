@@ -36,12 +36,12 @@ from utilities.utilities import readMultiStandoffTOFdata
 from utilities.ionStopping import ionStopping
 from math import isnan
 import gc
-import pathos
+
 
 
 argParser = argparse.ArgumentParser()
 argParser.add_argument('-run',choices=[0,1,2,3],default=0,type=int)   
-argParser.add_argument('-mpi',choices=[0,1], default=0,type=int)
+argParser.add_argument('-mpi', default=0,type=int)
 argParser.add_argument('-debug', choices=[0,1], default=0,type=int)
 argParser.add_argument('-nThreads', default=3, type=int)
 argParser.add_argument('-datafile', default='/home/gcr/particleyShared/quenchingFactors/tunlCsI_Jan2016/data/CODA/data/multistandoff.dat',
@@ -51,7 +51,7 @@ argParser.add_argument('-batch',choices=[0,1], default=0, type=int)
 argParser.add_argument('-forceCustomPDF', choices=[0,1], default=0, type=int)
 parsedArgs = argParser.parse_args()
 runNumber = parsedArgs.run
-mpiFlag = parsedArgs.mpi
+nMPInodes = parsedArgs.mpi
 debugFlag = parsedArgs.debug
 nThreads = parsedArgs.nThreads
 tofDataFilename = parsedArgs.datafile
@@ -74,11 +74,13 @@ if debugFlag == 1:
     debugging = True
 
 useMPI= False
-if mpiFlag == 1:
+if nMPInodes > 0:
     useMPI = True
     
-if useMPI:
-    from emcee.utils import MPIPool
+#if useMPI:
+    #from emcee.utils import MPIPool
+import pathos
+import dill
     
     
     
@@ -251,13 +253,13 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
         e0mean = np.mean(eZeros)
         
         # manually manage some memory 
-        del dataHist2d
-        del xedges
-        del yedges
-        del eZeros
-        del data_eD_matrix
-        del data_eD
-        del data_weights
+#        del dataHist2d
+#        del xedges
+#        del yedges
+#        del eZeros
+#        del data_eD_matrix
+#        del data_eD
+#        del data_weights
             
 #    print('linalg norm value {}'.format(np.linalg.norm(dataHist)))
 #    dataHist = dataHist / np.linalg.norm(dataHist)
@@ -435,7 +437,7 @@ def checkLikelihoodEval(observables, evalData):
     plot.show()
 
     
-    
+
 
 
 
@@ -611,28 +613,36 @@ p0 = [paramGuesses + p0agitators*np.random.randn(nDim) for i in range(nWalkers)]
 if useMPI:
     # initialize the MPI pool
     if debugging:
-        processPool = MPIPool(debug=True, loadbalance=True)
+        #processPool = MPIPool(debug=True, loadbalance=True)
+        processPool = pathos.multiprocessing.ProcessingPool(nodes=nMPInodes)
     else:
-        processPool = MPIPool(loadbalance=True)
+        #processPool = MPIPool(loadbalance=True)
+        processPool = pathos.multiprocessing.ProcessingPool(nodes=nMPInodes)
     # if not the master, wait for instruction
     if not processPool.is_master():
         processPool.wait()
         sys.exit(0)
         
-    sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
-                                    kwargs={'observables': observedTOF,
-                                            'standoffDists': standoffs,
-                                            'tofRanges': tof_range,
-                                            'nTOFbins': tofRunBins},
-                                    pool=processPool)
+        
 else:
-    sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
-                                    kwargs={'observables': observedTOF,
-                                            'standoffDists': standoffs,
-                                            'tofRanges': tof_range,
-                                            'nTOFbins': tofRunBins},
-                                    threads=nThreads)
+    processPool = pathos.multiprocessing.ProcessingPool(ncpus=nThreads)
+    
+sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
+                                kwargs={'observables': observedTOF,
+                                        'standoffDists': standoffs,
+                                        'tofRanges': tof_range,
+                                        'nTOFbins': tofRunBins},
+                             pool=processPool)
+#else:
+#    
+#    sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
+#                                    kwargs={'observables': observedTOF,
+#                                            'standoffDists': standoffs,
+#                                            'tofRanges': tof_range,
+#                                            'nTOFbins': tofRunBins},
+#                                    threads=nThreads)
 
+    
 if not useMPI:
     fout = open('burninchain.dat','w')
     fout.close()

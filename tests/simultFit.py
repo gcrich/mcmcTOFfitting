@@ -165,7 +165,7 @@ x_binCenters = np.linspace(x_minRange + x_binSize/2,
                            x_bins)
 
 # parameters for making the fake data...
-nEvPerLoop = 500
+nEvPerLoop = 10000
 data_x = np.repeat(x_binCenters,nEvPerLoop)
 
 

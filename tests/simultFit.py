@@ -611,9 +611,9 @@ p0 = [paramGuesses + p0agitators*np.random.randn(nDim) for i in range(nWalkers)]
 if useMPI:
     # initialize the MPI pool
     if debugging:
-        processPool = MPIPool(debug=True)
+        processPool = MPIPool(debug=True, loadbalance=True)
     else:
-        processPool = MPIPool()
+        processPool = MPIPool(loadbalance=True)
     # if not the master, wait for instruction
     if not processPool.is_master():
         processPool.wait()

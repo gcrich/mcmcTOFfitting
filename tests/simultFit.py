@@ -201,17 +201,9 @@ def getTOF(mass, energy, distance):
     and the distance traveled (in cm).
     Though simple enough to write inline, this will be used often.
     """
-    # TODO: remove the errstate try/except structure
-    # this is in place to debug persistent weird value exception erorrs
-    # seemes to occur elsewhere, though, and NOT in this function
-    # almost certainly, the error catching will add some overhead and slow things down
-    with np.errstate(invalid='raise'):
-        try:
-            velocity = physics.speedOfLight * np.sqrt(2 * energy / mass)
-        except FloatingPointError:
-            print('\n\n\nCAUGHT NUMPY INVALID VALUE ERROR\nDump of energy(ies) follows\n')
-            print(energy)
-            print('\nzero or negative values.. {}'.format(energy[energy <= 0]))
+    
+    velocity = physics.speedOfLight * np.sqrt(2 * energy / mass)
+        
     tof = distance / velocity
     return tof
     

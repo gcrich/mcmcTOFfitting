@@ -145,7 +145,7 @@ for i in range(4):
 tofRunBins = [tof_nBins['mid'], tof_nBins['close'], 
            tof_nBins['close'], tof_nBins['far']]
 
-eD_bins = 50
+eD_bins = 100
 eD_minRange = 200.0
 eD_maxRange = 1200.0
 eD_range = (eD_minRange, eD_maxRange)
@@ -155,7 +155,7 @@ eD_binCenters = np.linspace(eD_minRange + eD_binSize/2,
                             eD_bins)
 
 
-x_bins = 10
+x_bins = 20
 x_minRange = 0.0
 x_maxRange = distances.tunlSSA_CsI.cellLength
 x_range = (x_minRange,x_maxRange)
@@ -660,7 +660,7 @@ if not useMPI:
 #print(minimizedNLL)
 
 
-nDim, nWalkers = 8, 200
+nDim, nWalkers = 8, 256
 if debugging:
     nWalkers = 2 * nDim
 
@@ -716,7 +716,7 @@ if useMPI and processPool.is_master():
     fout.close()
 
 
-burninSteps = 200
+burninSteps = 400
 if debugging:
     burninSteps = 10
 print('\n\n\nRUNNING BURN IN WITH {0} STEPS\n\n\n'.format(burninSteps))
@@ -762,7 +762,7 @@ if not useMPI or processPool.is_master():
     fout.close()
 
 sampler.reset()
-mcIterations = 200
+mcIterations = 100
 if debugging:
     mcIterations = 10
 for i,samplerResult in enumerate(sampler.sample(burninPos, lnprob0=burninProb, rstate0=burninRstate, iterations=mcIterations)):
@@ -806,15 +806,16 @@ samples = sampler.chain[:,:,:].reshape((-1,nDim))
 if not e0_only:
     # Compute the quantiles.
     # this comes from https://github.com/dfm/emcee/blob/master/examples/line.py
-    e0_mcmc, sigma_0_mcmc, skew_mcmc = map(lambda v: (v[1], v[2]-v[1],
-                                                                    v[1]-v[0]),
-                                                         zip(*np.percentile(samples, [16, 50, 84],
-                                                                            axis=0)))
+    quartileResults = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]),
+                          zip(*np.percentile(samples, [16, 50, 84], axis=0)))
+
+    ed_mcmc, loc_mcmc, scale_mcmc, s_mcmc = quartileResults[:4]
     print("""MCMC result:
-        E0 = {0[0]} +{0[1]} -{0[2]}
-        sigma_0 = {1[0]} +{1[1]} -{1[2]}
-        skew = {2[0]} + {2[1]} - {2[2]}
-        """.format(e0_mcmc, sigma_0_mcmc, skew_mcmc))
+        E_D initial = {0[0]} +{0[1]} -{0[2]}
+        loc = {1[0]} +{1[1]} -{1[2]}
+        scale = {2[0]} + {2[1]} - {2[2]}
+        s = {3[0]} + {3[1]} - {3[2]}
+        """.format(ed_mcmc, loc_mcmc, scale_mcmc, s_mcmc))
     
     
 #    import corner as corn

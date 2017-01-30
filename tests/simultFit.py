@@ -145,7 +145,7 @@ for i in range(4):
 tofRunBins = [tof_nBins['mid'], tof_nBins['close'], 
            tof_nBins['close'], tof_nBins['far']]
 
-eD_bins = 100
+eD_bins = 50
 eD_minRange = 200.0
 eD_maxRange = 1200.0
 eD_range = (eD_minRange, eD_maxRange)
@@ -155,7 +155,7 @@ eD_binCenters = np.linspace(eD_minRange + eD_binSize/2,
                             eD_bins)
 
 
-x_bins = 20
+x_bins = 10
 x_minRange = 0.0
 x_maxRange = distances.tunlSSA_CsI.cellLength
 x_range = (x_minRange,x_maxRange)

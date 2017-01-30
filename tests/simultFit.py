@@ -165,7 +165,7 @@ x_binCenters = np.linspace(x_minRange + x_binSize/2,
                            x_bins)
 
 # parameters for making the fake data...
-nEvPerLoop = 10000
+nEvPerLoop = 50000 # probably a balance somewhere to optimize performance
 data_x = np.repeat(x_binCenters,nEvPerLoop)
 
 
@@ -400,7 +400,7 @@ def lnlike(params, observables, standoffDist, range_tof, nBins_tof,
     
     
 def compoundLnlike(params, observables, standoffDists, tofRanges, tofBinnings, 
-                   nDraws=100000):
+                   nDraws=200000):
     """Compute the joint likelihood of the model with each of the runs at different standoffs"""
     paramSets = [[params[0], params[1], params[2], params[3], scale] for scale in params[4:]]
     loglike = [lnlike(paramSet, obsSet, standoff, tofrange, tofbin, nDraws) for

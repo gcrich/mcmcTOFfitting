@@ -19,7 +19,7 @@ from __future__ import print_function
 import numpy as np
 from numpy import inf
 import scipy.optimize as optimize
-from scipy.integrate import odeint
+from scipy.integrate import ode
 from scipy.stats import (poisson, norm, lognorm)
 import scipy.special as special
 #from scipy.stats import skewnorm
@@ -223,6 +223,9 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
     beamE, eLoss, scale, s, scaleFactor = params
     e0mean = 900.0
     dataHist = np.zeros((x_bins, eD_bins))
+    
+    dedxForODE = lambda x, y: dedxfxn(energy=y,x=x)
+    
     nLoops = int(np.ceil(nSamples / nEvPerLoop))
     for loopNum in range(0, nLoops):
         #eZeros = np.random.normal( params[0], params[0]*params[1], nEvPerLoop )
@@ -237,29 +240,28 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
                 checkForBadEs = False
             replacements = np.repeat(beamE, nBads) - lognorm.rvs(s=s, loc=eLoss, scale=scale, size=nBads)
             eZeros[badIdxs] = replacements
-#        while np.isnan(np.sum(eZeros)) or np.isinf(np.sum(eZeros)):
-#            eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=nEvPerLoop)
-        data_eD_matrix = odeint( dedxfxn, eZeros, x_binCenters )
-        #data_eD = data_eD_matrix.flatten('K') # this is how i have been doing it..
-        data_eD = data_eD_matrix.flatten()
-        data_weights = ddnXSfxn.evaluate(data_eD)
+
+#data_eD_matrix = odeint( dedxfxn, eZeros, x_binCenters )
+        
+        odesolver = ode( dedxForODE ).set_integrator('dopri5').set_initial_value(eZeros)
+        for idx, xEvalPoint in enumerate(x_binCenters):
+            sol = odesolver.integrate( xEvalPoint )
+            #print('shape of returned ode solution {}, first 10 entries {}'.format(sol.shape, sol[:10]))
+                #data_eD_matrix = odesolver.integrate( x_binCenters )
+                #print('shape of returned ode solution {}, first 10 entries {}'.format(data_eD_matrix.shape, data_eD_matrix[:10]))
+                #data_eD = data_eD_matrix.flatten('K')
+            data_weights = ddnXSfxn.evaluate(sol)
+            hist, edEdges = np.histogram( sol, bins=eD_bins, range=(eD_minRange, eD_maxRange), weights=data_weights)
+            dataHist[idx,:] += hist
 #    print('length of data_x {} length of data_eD {} length of weights {}'.format(
 #          len(data_x), len(data_eD), len(data_weights)))
-        dataHist2d, xedges, yedges = np.histogram2d( data_x, data_eD,
-                                                [x_bins, eD_bins],
-                                                [[x_minRange,x_maxRange],[eD_minRange,eD_maxRange]],
-                                                weights=data_weights)
-        dataHist += dataHist2d # element-wise, in-place addition
-        e0mean = np.mean(eZeros)
-        
-        # manually manage some memory 
-#        del dataHist2d
-#        del xedges
-#        del yedges
-#        del eZeros
-#        del data_eD_matrix
-#        del data_eD
-#        del data_weights
+#dataHist2d, xedges, yedges = np.histogram2d( data_x, data_eD,
+#                                               [x_bins, eD_bins],
+#                                               [[x_minRange,x_maxRange],[eD_minRange,eD_maxRange]],
+#                                               weights=data_weights)
+#        dataHist += dataHist2d # element-wise, in-place addition
+
+
             
 #    print('linalg norm value {}'.format(np.linalg.norm(dataHist)))
 #    dataHist = dataHist / np.linalg.norm(dataHist)
@@ -267,6 +269,7 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
     dataHist /= np.sum(dataHist*eD_binSize*x_binSize)
 #    plot.matshow(dataHist)
 #    plot.show()
+    e0mean = np.mean(eZeros)
     drawHist2d = (np.rint(dataHist * nSamples)).astype(int)
     tofs = []
     tofWeights = []

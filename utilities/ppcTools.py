@@ -13,13 +13,13 @@ from __future__ import print_function
 import numpy as np
 from numpy import inf
 import matplotlib.pyplot as plt
-from scipy.integrate import odeint
+from scipy.integrate import (ode, odeint)
 from constants.constants import (masses, distances, physics, tofWindows)
 from utilities.utilities import (beamTimingShape, ddnXSinterpolator,
                                  getDDneutronEnergy, readChainFromFile,
-                                 getTOF)
+                                 getTOF, zeroDegreeTimingSpread)
 from utilities.ionStopping import ionStopping
-from scipy.stats import (skewnorm, norm)
+from scipy.stats import (lognorm, skewnorm, norm)
 
 
 
@@ -28,13 +28,13 @@ from scipy.stats import (skewnorm, norm)
 class ppcTools:
     """Assist in the sampling of posterior distributions from MCMC TOF fits
     """
-    def __init__(self, chainFilename, nSamplesFromTOF):
+    def __init__(self, chainFilename, nSamplesFromTOF, nBins_eD = 100, nBins_x = 20):
         """Create a PPC tools object - reads in chain from file"""
         self.chain, self.probs, self.nParams, self.nWalkers, self.nSteps = readChainFromFile(chainFilename)
         
-        self.eD_bins = 150
+        self.eD_bins = nBins_eD
         self.eD_minRange = 200.0
-        self.eD_maxRange = 1700.0
+        self.eD_maxRange = 1200.0
         self.eD_range = (self.eD_minRange, self.eD_maxRange)
         self.eD_binSize = (self.eD_maxRange - self.eD_minRange)/self.eD_bins
         self.eD_binCenters = np.linspace(self.eD_minRange + self.eD_binSize/2,
@@ -42,7 +42,7 @@ class ppcTools:
                                     self.eD_bins)
         self.eD_binMax = self.eD_bins - 1
         
-        self.x_bins = 100
+        self.x_bins = nBins_x
         self.x_minRange = 0.0
         self.x_maxRange = distances.tunlSSA_CsI.cellLength
         self.x_range = (self.x_minRange,self.x_maxRange)
@@ -59,6 +59,7 @@ class ppcTools:
         
         self.ddnXSinstance = ddnXSinterpolator()
         self.beamTiming = beamTimingShape()
+        self.zeroDegTimeSpreader = zeroDegreeTimingSpread()
         
         # stopping power model and parameters
         stoppingMedia_Z = 1
@@ -96,9 +97,82 @@ class ppcTools:
              distances.tunlSSA_CsI.standoffClose,
              distances.tunlSSA_CsI.standoffFar]
         
+        self.tofData = None
+        self.neutronSpectra = None
+        
         
         
     def generateModelData(self, params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
+                      dedxfxn, beamTimer, nSamples, getPDF=False):
+        """
+        Generate model data with cross-section weighting applied
+        ddnXSfxn is an instance of the ddnXSinterpolator class -
+        dedxfxn is a function used to calculate dEdx -
+        probably more efficient to these in rather than reinitializing
+        one each time
+        This is edited to accommodate multiple standoffs being passed
+        """
+        beamE, eLoss, scale, s, scaleFactor = params
+        e0mean = 900.0
+        dataHist = np.zeros((self.x_bins, self.eD_bins))
+        
+        dedxForODE = lambda x, y: dedxfxn(energy=y,x=x)
+        
+        nLoops = int(np.ceil(nSamples / self.nEvPerLoop))
+        for loopNum in range(0, nLoops):
+            eZeros = np.repeat(beamE, self.nEvPerLoop)
+            eZeros -= lognorm.rvs(s=s, loc=eLoss, scale=scale, size=self.nEvPerLoop)
+            checkForBadEs = True
+            while checkForBadEs:
+                badIdxs = np.where(eZeros <= 0.0)[0]
+                nBads = badIdxs.shape[0]
+                if nBads == 0:
+                    checkForBadEs = False
+                replacements = np.repeat(beamE, nBads) - lognorm.rvs(s=s, loc=eLoss, scale=scale, size=nBads)
+                eZeros[badIdxs] = replacements
+        
+            
+            odesolver = ode( dedxForODE ).set_integrator('dopri5').set_initial_value(eZeros)
+            for idx, xEvalPoint in enumerate(self.x_binCenters):
+                sol = odesolver.integrate( xEvalPoint )
+                data_weights = ddnXSfxn.evaluate(sol)
+                hist, edEdges = np.histogram( sol, bins=self.eD_bins,
+                                             range=(self.eD_minRange,
+                                                    self.eD_maxRange),
+                                             weights=data_weights)
+                dataHist[idx,:] += hist
+
+        dataHist /= np.sum(dataHist*self.eD_binSize*self.x_binSize)
+        e0mean = np.mean(eZeros)
+        drawHist2d = (np.rint(dataHist * nSamples)).astype(int)
+        tofs = []
+        tofWeights = []
+        eN_list = []
+        eN_atEachX = np.zeros(self.eD_bins)
+        for index, weight in np.ndenumerate( drawHist2d ):
+            cellLocation = self.x_binCenters[index[0]]
+            effectiveDenergy = (e0mean + self.eD_binCenters[index[1]])/2
+            tof_d = getTOF( masses.deuteron, effectiveDenergy, cellLocation )
+            neutronDistance = (distances.tunlSSA_CsI.cellLength - cellLocation +
+                               standoffDistance )
+            tof_n = getTOF(masses.neutron, self.eN_binCenters[index[1]],
+                           neutronDistance)
+            zeroD_times, zeroD_weights = self.zeroDegTimeSpreader.getTimesAndWeights( self.eN_binCenters[index[1]] )
+            tofs.append( tof_d + tof_n + zeroD_times )
+            tofWeights.append(weight * zeroD_weights)
+            eN_list.append(weight)
+            if index[1] == self.eD_binMax:
+                eN_arr = np.array(eN_list)
+                eN_atEachX = np.vstack((eN_atEachX, eN_arr))
+                eN_list = []
+
+        tofData, tofBinEdges = np.histogram( tofs, bins=nBins_tof, range=range_tof,
+                                        weights=tofWeights, density=getPDF)
+        return scaleFactor * self.beamTiming.applySpreading(tofData), eN_atEachX
+        
+        
+        
+    def generateModelData_original(self, params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
                       dedxfxn, beamTimer, getPDF=False):
         """
         Generate model data with cross-section weighting applied
@@ -194,12 +268,12 @@ class ppcTools:
                 modelParams.append(self.chain[:,:,nParam].flatten()[sampleToGet])
             
                 
-            e0, sigma0, skew0 = modelParams[:3]
-            scaleFactorEntries = modelParams[3:]
-            returnedData = [self.generateModelData([e0, sigma0, skew0, scaleFactor],
+            e0, loc, scale, s = modelParams[:4]
+            scaleFactorEntries = modelParams[4:]
+            returnedData = [self.generateModelData([e0, loc, scale, s, scaleFactor],
                                        standoff, tofrange, tofbins,
                                        self.ddnXSinstance, self.stoppingModel.dEdx,
-                                       self.beamTiming, True) for
+                                       self.beamTiming, self.nSamplesFromTOF, True) for
                                        scaleFactor, standoff, tofrange, tofbins
                                        in zip(scaleFactorEntries, 
                                               self.standoffs,
@@ -214,4 +288,35 @@ class ppcTools:
             generatedData.append(modelData)
             generatedNeutronSpectra.append(modelNeutronSpectrum)
             
+        self.tofData = generatedData
+        self.neutronSpectra= generatedNeutronSpectra
         return generatedData, generatedNeutronSpectra
+        
+    def makeSDEF_sia_cumulative(self, distNumber = 100):
+        """Produce an MCNP SDEF card for the neutron distribution, marginalized over the cell length
+        
+        This SDEF card will adhere to an SI A standard"""
+        # if we havent generated data yet, do it
+        if self.tofData == None or self.neutronSpectra == None:
+            self.generatePPC(self, 500)
+            
+        # first we collapse the neutron spectrum, collected by default atall X values
+        neutronSpectrumCollection = np.zeros(self.eD_bins)
+        for sampledParamSet in self.neutronSpectra:
+            samplesAlongLength = sampledParamSet[0]
+            summedAlongLength = np.sum(samplesAlongLength, axis=0)
+            neutronSpectrumCollection = np.vstack((neutronSpectrumCollection, summedAlongLength))
+        self.neutronSpectrum = np.sum(neutronSpectrumCollection, axis=0)
+        
+        
+        siStrings = ['si{} a'.format(distNumber)]
+        spStrings = ['sp{}'.format(distNumber)]
+        for eN, counts in zip(self.eN_binCenters, self.neutronSpectrum):
+            siStrings.append(' {:.0f}'.format(eN))
+            spStrings.append(' {:.0f}'.format(counts))
+        siString = ''.join(siStrings)
+        spString = ''.join(spStrings)
+        self.sdef_sia_cumulative = {'si': siString, 'sp': spString}
+        return self.sdef_sia_cumulative             
+        
+        

@@ -9,19 +9,24 @@ from utilities.utilities import (beamTimingShape, ddnXSinterpolator,
                                  getTOF, readMultiStandoffTOFdata)
 from utilities.ionStopping import ionStopping
 from utilities.ppcTools import ppcTools
-from scipy.stats import skewnorm
+from scipy.stats import (skewnorm, lognorm)
 import argparse
 
 argParser = argparse.ArgumentParser()
 argParser.add_argument('-file')
 argParser.add_argument('-tofDataFile')
 argParser.add_argument('-nParamSamples', default=50, type=int)
+argParser.add_argument('-nBinsE', default=100, type=int)
+argParser.add_argument('-nBinsX', default=20, type=int)
 parsedArgs = argParser.parse_args()
 chainFilename = parsedArgs.file
 tofDataFilename = parsedArgs.tofDataFile
 nParamSamples = parsedArgs.nParamSamples
+nBinsE = parsedArgs.nBinsE
+nBinsX = parsedArgs.nBinsX
 
-ppcTool = ppcTools(chainFilename, nSamplesFromTOF=5000)
+ppcTool = ppcTools(chainFilename, nSamplesFromTOF=5000,
+                   nBins_eD = nBinsE, nBins_x = nBinsX)
 #ppc, ppcNeutronSpectra = ppcTool.generatePPC( nChainEntries = nParamSamples )
 returnVal = ppcTool.generatePPC( nChainEntries = nParamSamples )
 ppc = returnVal[0]
@@ -43,7 +48,11 @@ for sampledParamSet in neutronSpecPPCdata:
     neutronSpectrumCollection = np.vstack((neutronSpectrumCollection, summedAlongLength))
 neutronSpectrum = np.sum(neutronSpectrumCollection, axis=0)
 neutronStats = np.percentile(neutronSpectrumCollection[1:,:], [16,50,84], axis=0)
-                
+             
+
+sdef_sia_cumulative = ppcTool.makeSDEF_sia_cumulative()
+print('got SDEF...')
+print('{}'.format(sdef_sia_cumulative))   
  
 # get the data from file
 tofData = readMultiStandoffTOFdata(tofDataFilename)

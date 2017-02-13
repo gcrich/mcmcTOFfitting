@@ -43,6 +43,11 @@ class distances(object):
         standoffClose = tipToColli + colliToZero
         standoffMid = standoffClose + delta1
         standoffFar = standoffMid + delta2
+        
+        colliToCsI = 59.45 #from collimator face to closest side of CsI
+        csiToZero = 355.7 # from closest side of CsI to face of zero degree
+        csiDiameter = 2.341 # cm, measured by calipers sep8 2014 (picture)
+        standoff_TUNLruns = colliToCsI + csiToZero + csiDiameter + tipToColli
 
 
 class qValues(object):

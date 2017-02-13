@@ -115,12 +115,14 @@ else:
 standoff = {0: distances.tunlSSA_CsI.standoffMid, 
             1: distances.tunlSSA_CsI.standoffClose,
             2: distances.tunlSSA_CsI.standoffClose,
-            3: distances.tunlSSA_CsI.standoffFar}
-standoffName = {0: 'mid', 1:'close', 2:'close', 3:'far'}
+            3: distances.tunlSSA_CsI.standoffFar,
+            4: distances.tunlSSA_CsI.standoff_TUNLruns}
+standoffName = {0: 'mid', 1:'close', 2:'close', 3:'far', 4:'production'}
 standoffs = [distances.tunlSSA_CsI.standoffMid, 
              distances.tunlSSA_CsI.standoffClose,
              distances.tunlSSA_CsI.standoffClose,
-             distances.tunlSSA_CsI.standoffFar]
+             distances.tunlSSA_CsI.standoffFar,
+             distances.tunlSSA_CsI.standoff_TUNLruns]
 
 tofWindowSettings = tofWindows()
 
@@ -134,16 +136,18 @@ tof_nBins = tofWindowSettings.nBins
 tof_minRange = [tofWindowSettings.minRange['mid'], 
                 tofWindowSettings.minRange['close'], 
                 tofWindowSettings.minRange['close'],
-                tofWindowSettings.minRange['far'] ]
+                tofWindowSettings.minRange['far'],
+                tofWindowSettings.minRange['production'] ]
 tof_maxRange = [tofWindowSettings.maxRange['mid'], 
                 tofWindowSettings.maxRange['close'], 
                 tofWindowSettings.maxRange['close'],
-                tofWindowSettings.maxRange['far'] ]
+                tofWindowSettings.maxRange['far'],
+                tofWindowSettings.maxRange['production'] ]
 tof_range = []
-for i in range(4):
+for i in range(5):
     tof_range.append((tof_minRange[i],tof_maxRange[i]))
 tofRunBins = [tof_nBins['mid'], tof_nBins['close'], 
-           tof_nBins['close'], tof_nBins['far']]
+           tof_nBins['close'], tof_nBins['far'], tof_nBins['production']]
 
 eD_bins = 50
 eD_minRange = 200.0
@@ -446,7 +450,7 @@ def lnprob(theta, observables, standoffDists, tofRanges, nTOFbins):
         return -inf
     loglike = compoundLnlike(theta, observables, standoffDists, tofRanges, 
                              nTOFbins)
-    gc.collect()
+#    gc.collect()
 #    print('loglike value {}'.format(loglike))
     logprob = prior + loglike
 #    print('logprob has value {}'.format(logprob))
@@ -517,7 +521,7 @@ binEdges = tofData[:,0]
 #                                               tof_nBins, tof_range)
 observedTOF = []
 observedTOFbinEdges=[]
-for i in range(4):
+for i in range(5):
     observedTOF.append(tofData[:,i+1][(binEdges >= tof_minRange[i]) & (binEdges < tof_maxRange[i])])
     observedTOFbinEdges.append(tofData[:,0][(binEdges>=tof_minRange[i])&(binEdges<tof_maxRange[i])])
 

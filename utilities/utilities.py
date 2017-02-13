@@ -209,7 +209,8 @@ def readMultiStandoffTOFdata(filename):
         for row in csvreader:
             lowerBinEdges.append(float(row['lowEdge']))
             tofCounts.append([float(row['run0']), float(row['run1']),
-                                    float(row['run2']), float(row['run3'])])
+                                    float(row['run2']), float(row['run3']), 
+                                    float(row['run4']) ])
     tofData = np.column_stack((lowerBinEdges,tofCounts))
     return tofData
 
@@ -228,8 +229,10 @@ class beamTimingShape:
     
     """
     def __init__(self):
-        self.sigma = 1.2474 # ns, from roofit
-        self.tau = 0.92503
+        #self.sigma = 1.2474 # ns, from roofit
+        #self.tau = 0.92503
+        self.sigma = 1.1910e+00 # ns, from roofit - with production included
+        self.tau = 1.0110e+00 # roofit, with production included
         
         
         self.binnedTOF = True # flag to use binned values

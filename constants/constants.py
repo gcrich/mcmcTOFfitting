@@ -59,6 +59,6 @@ class qValues(object):
 class tofWindows(object):
     """Windows of TOF used for different standoff distances
     """
-    nBins = {'close': 45, 'mid': 50, 'far': 50}
-    maxRange = {'close': 175.0, 'mid': 225.0, 'far': 240.0}
-    minRange = {'close':130.0, 'mid': 175.0, 'far': 190.0}
+    nBins = {'close': 45, 'mid': 50, 'far': 70, 'production': 65}
+    maxRange = {'close': 175.0, 'mid': 225.0, 'far': 260.0, 'production': 260.0}
+    minRange = {'close':130.0, 'mid': 175.0, 'far': 190.0, 'production':195.0}

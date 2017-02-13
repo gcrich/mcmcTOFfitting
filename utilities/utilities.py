@@ -205,7 +205,7 @@ def readMultiStandoffTOFdata(filename):
     with open(filename,'r') as tofFile:
         csvreader = csvlib.DictReader(tofFile, delimiter='\t', 
                                   fieldnames=['lowEdge','run0',
-                                  'run1','run2','run3'])
+                                  'run1','run2','run3','run4'])
         for row in csvreader:
             lowerBinEdges.append(float(row['lowEdge']))
             tofCounts.append([float(row['run0']), float(row['run1']),

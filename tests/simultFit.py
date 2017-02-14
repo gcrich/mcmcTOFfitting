@@ -425,8 +425,8 @@ paramRanges.append((min_beamE, max_beamE))
 paramRanges.append((min_eLoss, max_eLoss))
 paramRanges.append((min_scale, max_scale))
 paramRanges.append((min_s, max_s))
-for i in range(4):
-    paramRanges.append( (0.0, 5.0e5) ) # scale factors are all allowed to go between 0 and 30000 for now
+for i in range(5):
+    paramRanges.append( (0.0, 1.0e6) ) # scale factors are all allowed to go between 0 and 30000 for now
 
 def lnprior(theta):
     # run through list of params and if any are outside of allowed range, immediately return -inf

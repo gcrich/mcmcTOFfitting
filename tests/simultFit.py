@@ -534,7 +534,7 @@ s_guess = 0.5
 paramGuesses = [beamE_guess, eLoss_guess, scale_guess, s_guess]
 #badGuesses = [e0_bad, sigma0_bad, skew_bad]
 scaleFactor_guesses = []
-for i in range(4):
+for i in range(5):
     scaleFactor_guesses.append(0.7 * np.sum(observedTOF[i]))
     paramGuesses.append(np.sum(observedTOF[i]))
     #badGuesses.append(np.sum(observedTOF[i]))
@@ -594,7 +594,7 @@ if not useMPI:
             # plot the TOF
            
             tofbins = []
-            runColors=['#1b9e77','#d95f02','#7570b3','#e7298a']
+            runColors=['#e41a1c','#377eb8','#4daf4a','#984ea3', '#ff7f00']
             for idx in range(len(tof_minRange)):
                 tofbins.append(np.linspace(tof_minRange[idx], tof_maxRange[idx], tofRunBins[idx]))
             plot.figure()
@@ -664,7 +664,7 @@ if not useMPI:
 #print(minimizedNLL)
 
 
-nDim, nWalkers = 8, 256
+nDim, nWalkers = 9, 256
 if debugging:
     nWalkers = 2 * nDim
 

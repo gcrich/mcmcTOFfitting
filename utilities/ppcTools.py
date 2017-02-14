@@ -81,25 +81,31 @@ class ppcTools:
         self.tof_minRange = [tofWindowSettings.minRange['mid'], 
                         tofWindowSettings.minRange['close'], 
                         tofWindowSettings.minRange['close'],
-                        tofWindowSettings.minRange['far'] ]
+                        tofWindowSettings.minRange['far'],
+                        tofWindowSettings.minRange['production'] ]
         self.tof_maxRange = [tofWindowSettings.maxRange['mid'], 
                         tofWindowSettings.maxRange['close'], 
                         tofWindowSettings.maxRange['close'],
-                        tofWindowSettings.maxRange['far'] ]
+                        tofWindowSettings.maxRange['far'],
+                        tofWindowSettings.maxRange['production'] ]
         self.tof_range = []
-        for i in range(4):
+        for i in range(5):
             self.tof_range.append((self.tof_minRange[i],self.tof_maxRange[i]))
         self.tofRunBins = [tof_nBins['mid'], tof_nBins['close'], 
-                   tof_nBins['close'], tof_nBins['far']]
+                   tof_nBins['close'], tof_nBins['far'], tof_nBins['production']]
                    
         self.standoffs = [distances.tunlSSA_CsI.standoffMid, 
              distances.tunlSSA_CsI.standoffClose,
              distances.tunlSSA_CsI.standoffClose,
-             distances.tunlSSA_CsI.standoffFar]
+             distances.tunlSSA_CsI.standoffFar,
+             distances.tunlSSA_CsI.standoff_TUNLruns]
         
         self.tofData = None
         self.neutronSpectra = None
         
+        
+        self.paramNames = ['$E_0$', '$f_1$', '$f_2$', '$f_3$', '$N_1$',
+                           '$N_2$', '$N_3$', '$N_4$', '$N_5$']
         
         
     def generateModelData(self, params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
@@ -260,13 +266,14 @@ class ppcTools:
         generatedData = []
         generatedNeutronSpectra=[]
         totalChainSamples = len(self.chain[:-20,:,0].flatten())
+        
         # TODO: this next line could mean we repeat the same sample, i think
         samplesToGet = np.random.randint(0, totalChainSamples, size=nChainEntries)
         for sampleToGet in samplesToGet:
             modelParams = []
             for nParam in range(self.nParams):
                 modelParams.append(self.chain[:,:,nParam].flatten()[sampleToGet])
-            
+                
                 
             e0, loc, scale, s = modelParams[:4]
             scaleFactorEntries = modelParams[4:]
@@ -312,7 +319,7 @@ class ppcTools:
         siStrings = ['si{} a'.format(distNumber)]
         spStrings = ['sp{}'.format(distNumber)]
         for eN, counts in zip(self.eN_binCenters, self.neutronSpectrum):
-            siStrings.append(' {:.0f}'.format(eN))
+            siStrings.append(' {:.3f}'.format(eN/1000))
             spStrings.append(' {:.0f}'.format(counts))
         siString = ''.join(siStrings)
         spString = ''.join(spStrings)
@@ -320,3 +327,15 @@ class ppcTools:
         return self.sdef_sia_cumulative             
         
         
+    def makeCornerPlot(self, paramIndexLow = 0, paramIndexHigh = None, plotFilename = 'ppcCornerOut.png'):
+        """Produce a corner plot of the parameters from the chain
+        
+        paramIndexLow and paramIndexHigh define the upper and lower boundaries of the parameter indices to plot"""
+        if paramIndexHigh == None:
+            paramIndexHigh = self.nParams
+        samples = self.chain[:-20,:,paramIndexLow:paramIndexHigh].reshape((-1, paramIndexHigh - paramIndexLow))
+        import corner as corn
+        cornerFig = corn.corner(samples, labels=self.paramNames[paramIndexLow:paramIndexHigh], 
+                                quantiles=[0.15, 0.5, 0.84], show_titles=True,
+                                title_kwargs={'fontsize': 12})
+        cornerFig.savefig(plotFilename, dpi=300)

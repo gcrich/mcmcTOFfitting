@@ -62,13 +62,13 @@ binEdges = tofData[:,0]
 
 observedTOF = []
 observedTOFbinEdges=[]
-for i in range(4):
+for i in range(5):
     observedTOF.append(tofData[:,i+1][(binEdges >= ppcTool.tof_minRange[i]) & (binEdges < ppcTool.tof_maxRange[i])])
     observedTOFbinEdges.append(tofData[:,0][(binEdges>=ppcTool.tof_minRange[i])&(binEdges<ppcTool.tof_maxRange[i])])
                 
-runColors=['#1b9e77','#d95f02','#7570b3','#e7298a']            
+runColors=['#e41a1c','#377eb8','#4daf4a','#984ea3', '#ff7f00']            
 tofXvals = [np.linspace(minT, maxT, bins) for minT, maxT, bins in zip(ppcTool.tof_minRange, ppcTool.tof_maxRange, ppcTool.tofRunBins)]
-fig, axes = plt.subplots(4)
+fig, axes = plt.subplots(5)
 for idx, ax in enumerate(axes):
     ax.scatter(tofXvals[idx], observedTOF[idx], color=runColors[idx])
     ax.plot(tofXvals[idx], statsAllData[idx][1,:], color='blue')
@@ -86,6 +86,10 @@ plt.plot(eN_xVals, neutronStats[1,:], color='blue' )
 plt.plot(eN_xVals, neutronStats[0,:], color='red', alpha=0.4)
 plt.plot(eN_xVals, neutronStats[2,:], color='red', alpha=0.4)
 plt.draw()
-plt.savefig('PPC_neutronSpec.png', dpi=400)
+plt.savefig('PPC_neutronSpec.png', dpi=300)
+
+
+ppcTool.makeCornerPlot(plotFilename = 'corner_allParams.png')
+ppcTool.makeCornerPlot(paramIndexHigh = 4, plotFilename = 'corner_eParams.png')
 
 plt.show()

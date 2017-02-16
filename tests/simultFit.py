@@ -49,12 +49,14 @@ argParser.add_argument('-datafile', default='/home/gcr/particleyShared/quenching
 argParser.add_argument('-quitEarly', choices=[0,1], default=0, type=int)
 argParser.add_argument('-batch',choices=[0,1], default=0, type=int)
 argParser.add_argument('-forceCustomPDF', choices=[0,1], default=0, type=int)
+argParser.add_argument('-nDrawsPerEval', default=200000, type=int) # number of draws from distribution used in each evaluation of the likelihood function
 parsedArgs = argParser.parse_args()
 runNumber = parsedArgs.run
 nMPInodes = parsedArgs.mpi
 debugFlag = parsedArgs.debug
 nThreads = parsedArgs.nThreads
 tofDataFilename = parsedArgs.datafile
+nDrawsPerEval = parsedArgs.nDrawsPerEval
 
 # batchMode turns off plotting and extraneous stuff like test NLL eval at beginning 
 batchMode = False
@@ -435,7 +437,7 @@ def lnprior(theta):
             return -inf
     return 0
     
-def lnprob(theta, observables, standoffDists, tofRanges, nTOFbins):
+def lnprob(theta, observables, standoffDists, tofRanges, nTOFbins, nDraws=nDrawsPerEval):
     """Evaluate the log probability
     theta is a list of the model parameters
         E0, E0_sigma, scaleFactors0-4
@@ -449,7 +451,7 @@ def lnprob(theta, observables, standoffDists, tofRanges, nTOFbins):
     if not np.isfinite(prior):
         return -inf
     loglike = compoundLnlike(theta, observables, standoffDists, tofRanges, 
-                             nTOFbins)
+                             nTOFbins, nDraws)
 #    gc.collect()
 #    print('loglike value {}'.format(loglike))
     logprob = prior + loglike

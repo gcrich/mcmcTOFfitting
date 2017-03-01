@@ -40,7 +40,7 @@ import gc
 
 
 argParser = argparse.ArgumentParser()
-argParser.add_argument('-run',choices=[0,1,2,3],default=0,type=int)   
+argParser.add_argument('-nRuns',choices=[1,2,3,4,5],default=4,type=int)   
 argParser.add_argument('-mpi', default=0,type=int)
 argParser.add_argument('-debug', choices=[0,1], default=0,type=int)
 argParser.add_argument('-nThreads', default=3, type=int)
@@ -53,7 +53,7 @@ argParser.add_argument('-nDrawsPerEval', default=200000, type=int) # number of d
 argParser.add_argument('-nBurninSteps', default=400, type=int)
 argParser.add_argument('-nMainSteps', default=100, type=int)
 parsedArgs = argParser.parse_args()
-runNumber = parsedArgs.run
+nSimultRuns = parsedArgs.nRuns
 nMPInodes = parsedArgs.mpi
 debugFlag = parsedArgs.debug
 nThreads = parsedArgs.nThreads
@@ -518,7 +518,7 @@ def checkLikelihoodEval(observables, evalData):
 
 
 # get the data from file
-tofData = readMultiStandoffTOFdata(tofDataFilename)
+tofData = readMultiStandoffTOFdata(tofDataFilename, nRuns = nSimultRuns)
 
 
 binEdges = tofData[:,0]

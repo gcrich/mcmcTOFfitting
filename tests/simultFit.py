@@ -50,6 +50,8 @@ argParser.add_argument('-quitEarly', choices=[0,1], default=0, type=int)
 argParser.add_argument('-batch',choices=[0,1], default=0, type=int)
 argParser.add_argument('-forceCustomPDF', choices=[0,1], default=0, type=int)
 argParser.add_argument('-nDrawsPerEval', default=200000, type=int) # number of draws from distribution used in each evaluation of the likelihood function
+argParser.add_argument('-nBurninSteps', default=400, type=int)
+argParser.add_argument('-nMainSteps', default=100, type=int)
 parsedArgs = argParser.parse_args()
 runNumber = parsedArgs.run
 nMPInodes = parsedArgs.mpi
@@ -57,6 +59,8 @@ debugFlag = parsedArgs.debug
 nThreads = parsedArgs.nThreads
 tofDataFilename = parsedArgs.datafile
 nDrawsPerEval = parsedArgs.nDrawsPerEval
+burninSteps = parsedArgs.nBurninSteps
+mcIterations = parsedArgs.nMainSteps
 
 # batchMode turns off plotting and extraneous stuff like test NLL eval at beginning 
 batchMode = False

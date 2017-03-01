@@ -28,9 +28,11 @@ from scipy.stats import (lognorm, skewnorm, norm)
 class ppcTools:
     """Assist in the sampling of posterior distributions from MCMC TOF fits
     """
-    def __init__(self, chainFilename, nSamplesFromTOF, nBins_eD = 100, nBins_x = 20):
+    def __init__(self, chainFilename, nSamplesFromTOF, nBins_eD = 100, nBins_x = 20, nRuns = 4):
         """Create a PPC tools object - reads in chain from file"""
         self.chain, self.probs, self.nParams, self.nWalkers, self.nSteps = readChainFromFile(chainFilename)
+        
+        self.nRuns = nRuns
         
         self.eD_bins = nBins_eD
         self.eD_minRange = 200.0
@@ -155,6 +157,8 @@ class ppcTools:
         tofWeights = []
         eN_list = []
         eN_atEachX = np.zeros(self.eD_bins)
+        eD_list = []
+        eD_atEachX = np.zeros(self.eD_bins)
         for index, weight in np.ndenumerate( drawHist2d ):
             cellLocation = self.x_binCenters[index[0]]
             effectiveDenergy = (e0mean + self.eD_binCenters[index[1]])/2
@@ -167,14 +171,19 @@ class ppcTools:
             tofs.append( tof_d + tof_n + zeroD_times )
             tofWeights.append(weight * zeroD_weights)
             eN_list.append(weight)
+            eD_list.append(weight)
             if index[1] == self.eD_binMax:
                 eN_arr = np.array(eN_list)
                 eN_atEachX = np.vstack((eN_atEachX, eN_arr))
                 eN_list = []
+                eD_atEachX = np.vstack((eD_atEachX, np.array(eD_list)))
+                eD_list=[]
 
         tofData, tofBinEdges = np.histogram( tofs, bins=nBins_tof, range=range_tof,
                                         weights=tofWeights, density=getPDF)
-        return scaleFactor * self.beamTiming.applySpreading(tofData), eN_atEachX
+        return (scaleFactor * self.beamTiming.applySpreading(tofData), 
+                eN_atEachX,
+                eD_atEachX)
         
         
         
@@ -231,6 +240,8 @@ class ppcTools:
         tofWeights = []
         eN_list = []
         eN_atEachX = np.zeros(self.eD_bins)
+        eD_list = []
+        eD_atEachX = np.zeros(self.eD_bins)
         for index, weight in np.ndenumerate( drawHist2d ):
             cellLocation = self.x_binCenters[index[0]]
             effectiveDenergy = (e0 + self.eD_binCenters[index[1]])/2
@@ -242,12 +253,15 @@ class ppcTools:
             tofs.append( tof_d + tof_n )
             tofWeights.append(weight)
             eN_list.append(weight)
+            eD_list.append(weight)
             if index[1] == self.eD_binMax:
                 eN_arr = np.array(eN_list)
                 #print('stack of EN values has shape {0}'.format(eN_atEachX.shape))
                 #print('new EN array to append has shape {0}'.format(eN_arr.shape))
                 eN_atEachX = np.vstack((eN_atEachX, eN_arr))
                 eN_list = []
+                eD_atEachX = np.vstack((eD_atEachX, np.array(eD_list)))
+                eD_list=[]
             # TODO: this next line is the original way of doing this in a modern 
             # numpy distribution. should really check for version <1.6.1
             # and if lower than that, use the normed arg, otherwise use density
@@ -255,7 +269,9 @@ class ppcTools:
     #                                        weights=tofWeights, density=getPDF)
         tofData, tofBinEdges = np.histogram( tofs, bins=nBins_tof, range=range_tof,
                                             weights=tofWeights, normed=getPDF)
-        return scaleFactor * self.beamTiming.applySpreading(tofData), eN_atEachX
+        return (scaleFactor * self.beamTiming.applySpreading(tofData), 
+                eN_atEachX,
+                eD_atEachX)
         
     def generatePPC(self, nChainEntries=500):
         """Sample from the posterior and produce data in the observable space
@@ -265,6 +281,7 @@ class ppcTools:
         """
         generatedData = []
         generatedNeutronSpectra=[]
+        generatedDeuteronSpectra=[]
         totalChainSamples = len(self.chain[:-20,:,0].flatten())
         
         # TODO: this next line could mean we repeat the same sample, i think
@@ -283,22 +300,51 @@ class ppcTools:
                                        self.beamTiming, self.nSamplesFromTOF, True) for
                                        scaleFactor, standoff, tofrange, tofbins
                                        in zip(scaleFactorEntries, 
-                                              self.standoffs,
-                                              self.tof_range,
-                                              self.tofRunBins)]
+                                              self.standoffs[:self.nRuns],
+                                              self.tof_range[:self.nRuns],
+                                              self.tofRunBins[:self.nRuns])]
             # returned data is an array of .. a tuple (modelData, neutronSpectrum)
             modelData = []
             modelNeutronSpectrum = []
+            modelDeuteronSpectrum=[]
             for retDat in returnedData:
                 modelData.append(retDat[0])
                 modelNeutronSpectrum.append(retDat[1])
+                modelDeuteronSpectrum.append(retDat[2])
             generatedData.append(modelData)
             generatedNeutronSpectra.append(modelNeutronSpectrum)
+            generatedDeuteronSpectra.append(modelDeuteronSpectrum)
             
         self.tofData = generatedData
         self.neutronSpectra= generatedNeutronSpectra
-        return generatedData, generatedNeutronSpectra
+        self.deuteronSpectra = generatedDeuteronSpectra
+        return (generatedData, 
+                generatedNeutronSpectra, 
+                generatedDeuteronSpectra)
         
+        
+        
+    def sampleInitialEnergyDist(self, nSamples = 100):
+        """Generate a series of samples from the chain in the form of initial deuteron energy distributions"""
+        dZeroSamples = np.zeros(self.eD_bins)
+        totalChainSamples = len(self.chain[:-20,:,0].flatten())
+        samplesToGet = np.random.randint(0, totalChainSamples, size=nSamples)
+        for sampleToGet in samplesToGet:
+            # TODO: if number of parameters associated with energy distribution change, this will need to be updated as the  num is presently hardcoded
+            modelParams = []
+            for nParam in range(4):
+                modelParams.append(self.chain[:,:,nParam].flatten()[sampleToGet])
+        
+            e0, loc, scale, s = modelParams[:4]
+            edistrib = e0 - lognorm.rvs(s=s, loc=loc, scale=scale, size=self.nEvPerLoop)
+            eHist, bins = np.histogram(edistrib, bins=self.eD_bins,
+                                       range=(self.eD_minRange, 
+                                              self.eD_maxRange),
+                                       density=True)
+            dZeroSamples = np.vstack((dZeroSamples, eHist))
+        return dZeroSamples[1:]*self.eD_binSize
+            
+            
     def makeSDEF_sia_cumulative(self, distNumber = 100):
         """Produce an MCNP SDEF card for the neutron distribution, marginalized over the cell length
         

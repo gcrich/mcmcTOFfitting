@@ -195,22 +195,23 @@ class zeroDegreeTimingSpread:
     
     
     
-def readMultiStandoffTOFdata(filename):
+def readMultiStandoffTOFdata(filename, nRuns = 4):
     """Read in data from TAC for multiple-standoff runs
     
     Specify filename to access.
     """
+    names = ['lowEdge']
+    [names.append('run{}'.format(i)) for i in range(nRuns)]
+     
     lowerBinEdges =[]
     tofCounts=[]
     with open(filename,'r') as tofFile:
         csvreader = csvlib.DictReader(tofFile, delimiter='\t', 
-                                  fieldnames=['lowEdge','run0',
-                                  'run1','run2','run3','run4'])
+                                  fieldnames=names)
         for row in csvreader:
             lowerBinEdges.append(float(row['lowEdge']))
-            tofCounts.append([float(row['run0']), float(row['run1']),
-                                    float(row['run2']), float(row['run3']), 
-                                    float(row['run4']) ])
+            newEntry = [float(row[name]) for name in names[1:]]
+            tofCounts.append(newEntry)
     tofData = np.column_stack((lowerBinEdges,tofCounts))
     return tofData
 

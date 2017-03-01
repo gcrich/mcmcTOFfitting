@@ -726,7 +726,6 @@ if useMPI and processPool.is_master():
     fout.close()
 
 
-burninSteps = 400
 if debugging:
     burninSteps = 10
 print('\n\n\nRUNNING BURN IN WITH {0} STEPS\n\n\n'.format(burninSteps))
@@ -772,7 +771,7 @@ if not useMPI or processPool.is_master():
     fout.close()
 
 sampler.reset()
-mcIterations = 100
+
 if debugging:
     mcIterations = 10
 for i,samplerResult in enumerate(sampler.sample(burninPos, lnprob0=burninProb, rstate0=burninRstate, iterations=mcIterations)):

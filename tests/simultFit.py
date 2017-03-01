@@ -786,26 +786,7 @@ for i,samplerResult in enumerate(sampler.sample(burninPos, lnprob0=burninProb, r
 if useMPI:
     processPool.close()
     
-if doPlotting:
-    if not e0_only:
-        plot.figure()
-        plot.subplot(311)
-        plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
-        plot.ylabel(r'$E_0$ (keV)')
-        plot.subplot(312)
-        plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
-        plot.ylabel(r'$\sigma_0$ (keV)')
-        plot.subplot(313)
-        plot.plot(sampler.chain[:,:,2].T,'-',color='k',alpha=0.2)
-        plot.ylabel(r'skew')
-        plot.xlabel('Step')
-    else:
-        plot.figure()
-        plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
-        plot.ylabel(r'$E_0$ (keV)')
-        plot.xlabel('Step')
-    plot.savefig('emceeRunSampleChainsOut.png',dpi=300)
-    plot.draw()
+
 
 samples = sampler.chain[:,:,:].reshape((-1,nDim))
 
@@ -836,5 +817,26 @@ else:
     print("""MCMC result:
         E0 = {0[0]} +{0[1]} -{0[2]}
         """.format(e0_mcmc))
-    
-plot.show()
+        
+        
+if doPlotting:
+    if not e0_only:
+        plot.figure()
+        plot.subplot(311)
+        plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
+        plot.ylabel(r'$E_0$ (keV)')
+        plot.subplot(312)
+        plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
+        plot.ylabel(r'$\sigma_0$ (keV)')
+        plot.subplot(313)
+        plot.plot(sampler.chain[:,:,2].T,'-',color='k',alpha=0.2)
+        plot.ylabel(r'skew')
+        plot.xlabel('Step')
+    else:
+        plot.figure()
+        plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
+        plot.ylabel(r'$E_0$ (keV)')
+        plot.xlabel('Step')
+    plot.savefig('emceeRunSampleChainsOut.png',dpi=300)
+    plot.draw()    
+    plot.show()

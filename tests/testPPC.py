@@ -49,7 +49,11 @@ for sampledParamSet in neutronSpecPPCdata:
     summedAlongLength = np.sum(samplesAlongLength, axis=0)
     neutronSpectrumCollection = np.vstack((neutronSpectrumCollection, summedAlongLength))
 neutronSpectrum = np.sum(neutronSpectrumCollection, axis=0)
-neutronStats = np.percentile(neutronSpectrumCollection[1:,:], [16,50,84], axis=0)
+neutronSpectrumCollectionNormalized = []
+for spectrum in neutronSpectrumCollection[1:,:]:
+    normFactor = np.sum(spectrum)
+    neutronSpectrumCollectionNormalized.append(spectrum / normFactor)
+neutronStats = np.percentile(neutronSpectrumCollectionNormalized, [16,50,84], axis=0)
              
 
 dSpectrumCollection = np.zeros(ppcTool.eD_bins)
@@ -80,7 +84,7 @@ for i in range(numRuns):
     observedTOFbinEdges.append(tofData[:,0][(binEdges>=ppcTool.tof_minRange[i])&(binEdges<ppcTool.tof_maxRange[i])])
                 
 # this is from colorbrewer2
-runColors=['#bf5b17','#386cb0','#beaed4','#7fc97f', '#fdc086']  
+#runColors=['#bf5b17','#386cb0','#beaed4','#7fc97f', '#fdc086']  
 # next set is from iwanthue  - http://tools.medialab.sciences-po.fr/iwanthue/
 # last color is good for overlaying lines
 runColors = ["#ff678f", "#004edc", "#e16400", "#1fceff", "#781616", "#149c00"] 

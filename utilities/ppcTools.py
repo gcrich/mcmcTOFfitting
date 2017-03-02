@@ -91,8 +91,8 @@ class ppcTools:
                         tofWindowSettings.maxRange['far'],
                         tofWindowSettings.maxRange['production'] ]
         self.tof_range = []
-        for i in range(5):
-            self.tof_range.append((self.tof_minRange[i],self.tof_maxRange[i]))
+        for minR,maxR in zip(self.tof_minRange, self.tof_maxRange):
+            self.tof_range.append((minR,maxR))
         self.tofRunBins = [tof_nBins['mid'], tof_nBins['close'], 
                    tof_nBins['close'], tof_nBins['far'], tof_nBins['production']]
                    
@@ -141,6 +141,7 @@ class ppcTools:
         
             
             odesolver = ode( dedxForODE ).set_integrator('dopri5').set_initial_value(eZeros)
+            eD_atEachX = np.zeros(self.eD_bins)
             for idx, xEvalPoint in enumerate(self.x_binCenters):
                 sol = odesolver.integrate( xEvalPoint )
                 data_weights = ddnXSfxn.evaluate(sol)
@@ -149,6 +150,11 @@ class ppcTools:
                                                     self.eD_maxRange),
                                              weights=data_weights)
                 dataHist[idx,:] += hist
+                hist, edEdges = np.histogram(sol, bins=self.eD_bins,
+                                             range=(self.eD_minRange,
+                                                    self.eD_maxRange),
+                                            density=True)
+                eD_atEachX = np.vstack((eD_atEachX, hist))
 
         dataHist /= np.sum(dataHist*self.eD_binSize*self.x_binSize)
         e0mean = np.mean(eZeros)
@@ -157,8 +163,6 @@ class ppcTools:
         tofWeights = []
         eN_list = []
         eN_atEachX = np.zeros(self.eD_bins)
-        eD_list = []
-        eD_atEachX = np.zeros(self.eD_bins)
         for index, weight in np.ndenumerate( drawHist2d ):
             cellLocation = self.x_binCenters[index[0]]
             effectiveDenergy = (e0mean + self.eD_binCenters[index[1]])/2
@@ -171,13 +175,11 @@ class ppcTools:
             tofs.append( tof_d + tof_n + zeroD_times )
             tofWeights.append(weight * zeroD_weights)
             eN_list.append(weight)
-            eD_list.append(weight)
             if index[1] == self.eD_binMax:
                 eN_arr = np.array(eN_list)
                 eN_atEachX = np.vstack((eN_atEachX, eN_arr))
                 eN_list = []
-                eD_atEachX = np.vstack((eD_atEachX, np.array(eD_list)))
-                eD_list=[]
+                
 
         tofData, tofBinEdges = np.histogram( tofs, bins=nBins_tof, range=range_tof,
                                         weights=tofWeights, density=getPDF)
@@ -293,7 +295,7 @@ class ppcTools:
                 
                 
             e0, loc, scale, s = modelParams[:4]
-            scaleFactorEntries = modelParams[4:]
+            scaleFactorEntries = modelParams[4:4+self.nRuns]
             returnedData = [self.generateModelData([e0, loc, scale, s, scaleFactor],
                                        standoff, tofrange, tofbins,
                                        self.ddnXSinstance, self.stoppingModel.dEdx,
@@ -303,7 +305,7 @@ class ppcTools:
                                               self.standoffs[:self.nRuns],
                                               self.tof_range[:self.nRuns],
                                               self.tofRunBins[:self.nRuns])]
-            # returned data is an array of .. a tuple (modelData, neutronSpectrum)
+            # returned data is an array of .. a tuple (modelData, neutronSpectrum, deuteronSpectrum)
             modelData = []
             modelNeutronSpectrum = []
             modelDeuteronSpectrum=[]

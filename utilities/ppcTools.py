@@ -153,7 +153,7 @@ class ppcTools:
                 hist, edEdges = np.histogram(sol, bins=self.eD_bins,
                                              range=(self.eD_minRange,
                                                     self.eD_maxRange),
-                                            density=True)
+                                            density=False)
                 eD_atEachX = np.vstack((eD_atEachX, hist))
 
         dataHist /= np.sum(dataHist*self.eD_binSize*self.x_binSize)
@@ -326,7 +326,7 @@ class ppcTools:
         
         
         
-    def sampleInitialEnergyDist(self, nSamples = 100):
+    def sampleInitialEnergyDist(self, nSamples = 100, returnNormed=False):
         """Generate a series of samples from the chain in the form of initial deuteron energy distributions"""
         dZeroSamples = np.zeros(self.eD_bins)
         totalChainSamples = len(self.chain[:-20,:,0].flatten())
@@ -342,9 +342,11 @@ class ppcTools:
             eHist, bins = np.histogram(edistrib, bins=self.eD_bins,
                                        range=(self.eD_minRange, 
                                               self.eD_maxRange),
-                                       density=True)
+                                       density=returnNormed)
             dZeroSamples = np.vstack((dZeroSamples, eHist))
-        return dZeroSamples[1:]*self.eD_binSize
+        if returnNormed:
+            return dZeroSamples[1:]*self.eD_binSize
+        return dZeroSamples[1:]
             
             
     def makeSDEF_sia_cumulative(self, distNumber = 100):

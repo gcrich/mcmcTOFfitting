@@ -284,14 +284,14 @@ class ppcTools:
         generatedData = []
         generatedNeutronSpectra=[]
         generatedDeuteronSpectra=[]
-        totalChainSamples = len(self.chain[:-20,:,0].flatten())
+        totalChainSamples = len(self.chain[-50:,:,0].flatten())
         
         # TODO: this next line could mean we repeat the same sample, i think
         samplesToGet = np.random.randint(0, totalChainSamples, size=nChainEntries)
         for sampleToGet in samplesToGet:
             modelParams = []
             for nParam in range(self.nParams):
-                modelParams.append(self.chain[:,:,nParam].flatten()[sampleToGet])
+                modelParams.append(self.chain[-50:,:,nParam].flatten()[sampleToGet])
                 
                 
             e0, loc, scale, s = modelParams[:4]
@@ -329,13 +329,13 @@ class ppcTools:
     def sampleInitialEnergyDist(self, nSamples = 100, returnNormed=False):
         """Generate a series of samples from the chain in the form of initial deuteron energy distributions"""
         dZeroSamples = np.zeros(self.eD_bins)
-        totalChainSamples = len(self.chain[:-20,:,0].flatten())
+        totalChainSamples = len(self.chain[-50:,:,0].flatten())
         samplesToGet = np.random.randint(0, totalChainSamples, size=nSamples)
         for sampleToGet in samplesToGet:
             # TODO: if number of parameters associated with energy distribution change, this will need to be updated as the  num is presently hardcoded
             modelParams = []
             for nParam in range(4):
-                modelParams.append(self.chain[:,:,nParam].flatten()[sampleToGet])
+                modelParams.append(self.chain[-50:,:,nParam].flatten()[sampleToGet])
         
             e0, loc, scale, s = modelParams[:4]
             edistrib = e0 - lognorm.rvs(s=s, loc=loc, scale=scale, size=self.nEvPerLoop)
@@ -383,7 +383,7 @@ class ppcTools:
         paramIndexLow and paramIndexHigh define the upper and lower boundaries of the parameter indices to plot"""
         if paramIndexHigh == None:
             paramIndexHigh = self.nParams
-        samples = self.chain[:-20,:,paramIndexLow:paramIndexHigh].reshape((-1, paramIndexHigh - paramIndexLow))
+        samples = self.chain[-50:,:,paramIndexLow:paramIndexHigh].reshape((-1, paramIndexHigh - paramIndexLow))
         import corner as corn
         cornerFig = corn.corner(samples, labels=self.paramNames[paramIndexLow:paramIndexHigh], 
                                 quantiles=[0.15, 0.5, 0.84], show_titles=True,

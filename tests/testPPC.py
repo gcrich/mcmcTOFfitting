@@ -186,7 +186,7 @@ plt.savefig('PPC_neutronSpec.png', dpi=400)
 
 
 
-#ppcTool.makeCornerPlot(plotFilename = 'corner_allParams.png')
-#ppcTool.makeCornerPlot(paramIndexHigh = 4, plotFilename = 'corner_eParams.png')
+ppcTool.makeCornerPlot(plotFilename = 'corner_allParams.png')
+ppcTool.makeCornerPlot(paramIndexHigh = 4, plotFilename = 'corner_eParams.png')
 
 plt.show()

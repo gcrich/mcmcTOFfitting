@@ -4,6 +4,8 @@
 #
 # pulls an MCMC chain from file and plots it
 # convenient helper utility
+#
+# note that some hacked edits were made to prepare plots for GCR thesis...
 
 from __future__ import print_function
 import numpy as np
@@ -98,22 +100,30 @@ steps = np.linspace(1, nSteps, nSteps)
 #plt.xlabel('Step')
 #plt.draw()
 
-plt.figure()
-plt.subplot(411)
-plt.plot(steps, chain[:,:,0], color='k', alpha=0.2)
-plt.ylabel('$E_{beam}$ (keV)')
-plt.subplot(412)
-plt.plot(steps, chain[:,:,1], color='k', alpha=0.2)
-plt.ylabel('$f_1$')
-plt.subplot(413)
-plt.plot(steps, chain[:,:,2],color='k', alpha=0.2)
-plt.ylabel('$f_2$')
-plt.subplot(414)
-plt.plot(steps, chain[:,:,3],color='k', alpha=0.2)
-plt.ylabel('$f_3$')
-plt.xlabel('Step')
+# TODO: there are some pretty hardcoded things here
+#       should make this as general as possible, but for now i need to graduate 
+#       - so things are hacked together to make plots necessary for thesis
+fig, axes = plt.subplots(4, sharex=True, figsize =(8.5,10.51))
+for ax, chainSamples, label in zip(axes, 
+                            [chain[:,:,0],chain[:,:,1], chain[:,:,2], chain[:,:,3]],
+                            [r'$E_{beam}$ (keV)', r'$\theta$ (keV)', r'$m$ (keV)', r'$\sigma$ (1 / keV)']):#[r'$E_{beam}$ (keV)',r'$f_1$',r'$f_2$',r'$f_3$']):
+    ax.plot(steps, chainSamples, alpha=0.2, color='k')
+    ax.set_ylabel(label)
+#axes[0].plot(steps, chain[:,:,0], color='k', alpha=0.2)
+#plt.ylabel('$E_{beam}$ (keV)')
+#plt.subplot(412)
+#plt.plot(steps, chain[:,:,1], color='k', alpha=0.2)
+#plt.ylabel('$f_1$')
+#plt.subplot(413)
+#plt.plot(steps, chain[:,:,2],color='k', alpha=0.2)
+#plt.ylabel('$f_2$')
+#plt.subplot(414)
+#plt.plot(steps, chain[:,:,3],color='k', alpha=0.2)
+#plt.ylabel('$f_3$')
+axes[3].set_xlabel('Step')
+axes[3].set_xlim(0,300)
 plt.draw()
-plt.savefig('energyParameter_chain.png', dpi=300)
+plt.savefig('energyParameter_chain.pdf')
 
 plt.figure()
 plt.plot(steps, probs[:,:], color='k', alpha=0.2)

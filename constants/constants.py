@@ -21,7 +21,14 @@ class masses(object):
     electron = 511 # keV/c^2
     deuteron = 1.8756e+06  # keV /c^2
     neutron = 939565.0  # keV/c^2
+    proton = 938272.084 # keV/c^2 (1.00727647 in amu)
     he3 = 2.809414e6  # keV/c^2
+    
+    # li7 = 7.016003437 in amu
+    li7 = 6535365.77 # keV/c^2
+
+    # beryllium 7 mass (7.01692872 in amu)
+    be7 = 6536227.67 # keV/c^2
 
 
 class distances(object):
@@ -49,11 +56,18 @@ class distances(object):
         csiDiameter = 2.341 # cm, measured by calipers sep8 2014 (picture)
         standoff_TUNLruns = colliToCsI + csiToZero + csiDiameter + tipToColli
 
+    class cosine_NaI(object):
+        """
+        Distances associated with COSINE-collab-affiliated NaI QF measurements
+        """
+        
+
 
 class qValues(object):
     """Q values of reactions
     """
     ddn = 3268.914  # Q value of DDN reaction, in keV
+    lipn = -1644.24 # Q value of Li7(p,n) reaction, in keV
 
     
 class tofWindows(object):

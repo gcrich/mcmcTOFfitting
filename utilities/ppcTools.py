@@ -111,7 +111,7 @@ class ppcTools:
         
         
     def generateModelData(self, params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
-                      dedxfxn, beamTimer, nSamples, getPDF=False):
+                      dedxfxn, beamTimer, nSamples, getPDF=False, storeDTOF=False):
         """
         Generate model data with cross-section weighting applied
         ddnXSfxn is an instance of the ddnXSinterpolator class -
@@ -119,6 +119,8 @@ class ppcTools:
         probably more efficient to these in rather than reinitializing
         one each time
         This is edited to accommodate multiple standoffs being passed
+        
+        storeDTOF is an option added to add capabilities in MCNP SDEF generation
         """
         beamE, eLoss, scale, s, scaleFactor = params
         e0mean = 900.0
@@ -163,6 +165,7 @@ class ppcTools:
         tofWeights = []
         eN_list = []
         eN_atEachX = np.zeros(self.eD_bins)
+#        dtofs = []
         for index, weight in np.ndenumerate( drawHist2d ):
             cellLocation = self.x_binCenters[index[0]]
             effectiveDenergy = (e0mean + self.eD_binCenters[index[1]])/2
@@ -175,6 +178,8 @@ class ppcTools:
             tofs.append( tof_d + tof_n + zeroD_times )
             tofWeights.append(weight * zeroD_weights)
             eN_list.append(weight)
+#            if storeDTOF:
+#                dtofs.append(tof_d)
             if index[1] == self.eD_binMax:
                 eN_arr = np.array(eN_list)
                 eN_atEachX = np.vstack((eN_atEachX, eN_arr))
@@ -348,6 +353,46 @@ class ppcTools:
             return dZeroSamples[1:]*self.eD_binSize
         return dZeroSamples[1:]
             
+    
+    
+    def getDTOFdistribution(self):
+        '''Produce a distribution of deuteron time-of-flight through 
+        gas cell from PPC'''
+        totalChainSamples = len(self.chain[-50:,:,0].flatten())
+        
+        dtofHist = np.zeros((self.x_bins, 100))
+        
+        dedxForODE = lambda x, y: self.stoppingModel.dEdx(energy=y,x=x)
+        
+        samplesToGet = np.random.randint( 0, totalChainSamples, 1 )
+        for sampleToGet in samplesToGet:
+            modelParams = []
+            for nParam in range(self.nParams):
+                modelParams.append(self.chain[-50:,:,nParam].flatten()[sampleToGet])
+                
+            e0, loc, scale, s = modelParams[:4]
+            
+            eZeros = np.repeat( e0, 1000 )
+            eZeros -= lognorm.rvs(s=s, loc=loc, scale=scale, size=1000)
+            print(eZeros)
+            odesolver = ode( dedxForODE ).set_integrator('dopri5')
+            odesolver.set_initial_value(eZeros)
+            eD_atEachX = np.zeros(self.eD_bins)
+            res = None
+            evPoints = []
+            for idx, xEvalPoint in enumerate(self.x_binCenters):
+                sol = odesolver.integrate(xEvalPoint)
+                print('x loc: {}\t{}'.format(xEvalPoint,sol[0]))
+                if idx == 0:
+                    res = sol
+                else:
+                    res = np.vstack((res, sol))
+                evPoints.append(xEvalPoint)
+        odesolver.set_initial_value([900.0,850.0])
+        testSols = [odesolver.integrate([1.0,1.0]), odesolver.integrate([2.0,2.0])]
+        print('test solutions...\ntest 1: {}\ntest 2: {}'.format(testSols[0], testSols[1]))
+        return res, evPoints, sol
+            
             
     def makeSDEF_sia_cumulative(self, distNumber = 100):
         """Produce an MCNP SDEF card for the neutron distribution, marginalized over the cell length
@@ -377,15 +422,15 @@ class ppcTools:
         return self.sdef_sia_cumulative             
         
         
-    def makeCornerPlot(self, paramIndexLow = 0, paramIndexHigh = None, plotFilename = 'ppcCornerOut.png'):
+    def makeCornerPlot(self, paramIndexLow = 0, paramIndexHigh = None, nStepsToInclude = 50, plotFilename = 'ppcCornerOut.png'):
         """Produce a corner plot of the parameters from the chain
         
         paramIndexLow and paramIndexHigh define the upper and lower boundaries of the parameter indices to plot"""
         if paramIndexHigh == None:
             paramIndexHigh = self.nParams
-        samples = self.chain[-50:,:,paramIndexLow:paramIndexHigh].reshape((-1, paramIndexHigh - paramIndexLow))
+        samples = self.chain[-nStepsToInclude:,:,paramIndexLow:paramIndexHigh].reshape((-1, paramIndexHigh - paramIndexLow))
         import corner as corn
         cornerFig = corn.corner(samples, labels=self.paramNames[paramIndexLow:paramIndexHigh], 
-                                quantiles=[0.15, 0.5, 0.84], show_titles=True,
+                                quantiles=[0.16, 0.5, 0.84], show_titles=True,
                                 title_kwargs={'fontsize': 12})
-        cornerFig.savefig(plotFilename, dpi=300)
+        cornerFig.savefig(plotFilename)

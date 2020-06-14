@@ -53,9 +53,9 @@ tof_minRange = tofWindowSettings.minRange[standoffName[runNumber]]
 tof_maxRange = tofWindowSettings.maxRange[standoffName[runNumber]]
 tof_range = (tof_minRange,tof_maxRange)
 
-eD_bins = 150
+eD_bins = 240
 eD_minRange = 200.0
-eD_maxRange = 1700.0
+eD_maxRange = 2600.0
 eD_range = (eD_minRange, eD_maxRange)
 eD_binSize = (eD_maxRange - eD_minRange)/eD_bins
 eD_binCenters = np.linspace(eD_minRange + eD_binSize/2,
@@ -65,7 +65,7 @@ eD_binCenters = np.linspace(eD_minRange + eD_binSize/2,
 
 x_bins = 100
 x_minRange = 0.0
-x_maxRange = distances.tunlSSA_CsI.cellLength
+x_maxRange = distances.tunlSSA_CsI_oneBD.cellLength
 x_range = (x_minRange,x_maxRange)
 x_binSize = (x_maxRange - x_minRange)/x_bins
 x_binCenters = np.linspace(x_minRange + x_binSize/2,
@@ -78,8 +78,8 @@ data_x = np.repeat(x_binCenters,nEvPerLoop)
 
 
 # PARAMETER BOUNDARIES
-min_e0, max_e0 = 600.0,1100.0
-min_sigma_0,max_sigma_0 = 0.02, 0.3
+min_e0, max_e0 = 1000.0,2600.0
+min_sigma_0,max_sigma_0 = 0.02, 0.5
 
 
 

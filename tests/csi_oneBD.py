@@ -188,11 +188,6 @@ nEvPerLoop = 50000
 data_x = np.repeat(x_binCenters,nEvPerLoop)
 
 
-# PARAMETER BOUNDARIES
-min_e0, max_e0 = 1000.0,2600.0
-min_sigma_0,max_sigma_0 = 0.02, 0.5
-
-
 
 ddnXSinstance = ddnXSinterpolator()
 beamTiming = beamTimingShape()
@@ -227,55 +222,6 @@ def getTOF(mass, energy, distance):
     return tof
     
     
-def generateModelData_old(params, standoffDistance, ddnXSfxn, dedxfxn,
-                      nSamples, getPDF=False):
-    """
-    Generate model data with cross-section weighting applied
-    ddnXSfxn is an instance of the ddnXSinterpolator class -
-    dedxfxn is a function used to calculate dEdx -
-    probably more efficient to these in rather than reinitializing
-    one each time
-    """
-    e0, sigma0 = params
-    dataHist = np.zeros((x_bins, eD_bins))
-    nLoops = int(nSamples / nEvPerLoop)
-    for loopNum in range(0, nLoops):
-        eZeros = np.random.normal( e0, sigma0*e0, nEvPerLoop )
-        data_eD_matrix = odeint( dedxfxn, eZeros, x_binCenters )
-        data_eD = data_eD_matrix.flatten('K')
-        data_weights = ddnXSfxn.evaluate(data_eD)
-#    print('length of data_x {} length of data_eD {} length of weights {}'.format(
-#          len(data_x), len(data_eD), len(data_weights)))
-        dataHist2d, xedges, yedges = np.histogram2d( data_x, data_eD,
-                                                [x_bins, eD_bins],
-                                                [[x_minRange,x_maxRange],[eD_minRange,eD_maxRange]],
-                                                weights=data_weights)
-        dataHist = np.add(dataHist, dataHist2d)
-            
-#    print('linalg norm value {}'.format(np.linalg.norm(dataHist)))
-#    dataHist = dataHist / np.linalg.norm(dataHist)
-#    print('sum of data hist {}'.format(np.sum(dataHist*eD_binSize*x_binSize)))
-    dataHist = dataHist/ np.sum(dataHist*eD_binSize*x_binSize)
-#    plot.matshow(dataHist)
-#    plot.show()
-    drawHist2d = (np.rint(dataHist * nSamples)).astype(int)
-    tofs = []
-    tofWeights = []
-    for index, weight in np.ndenumerate( drawHist2d ):
-        cellLocation = x_binCenters[index[0]]
-        effectiveDenergy = (e0 + eD_binCenters[index[1]])/2
-        tof_d = getTOF( masses.deuteron, effectiveDenergy, cellLocation )
-        neutronDistance = (distances.tunlSSA_CsI.cellLength - cellLocation +
-                           distances.tunlSSA_CsI.zeroDegLength/2 +
-                           standoffDistance )
-        tof_n = getTOF(masses.neutron, eN_binCenters[index[1]], neutronDistance)
-        tofs.append( tof_d + tof_n )
-        tofWeights.append(weight)
-    tofData, tofBinEdges = np.histogram( tofs, bins=tof_nBins, range=tof_range,
-                                        weights=tofWeights, density=getPDF)
-    #print('\nNumber of TOF bins in fake data {}'.format(tofData.shape))
-    return tofData
-
 
 def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
                       dedxfxn, beamTimer, nSamples, getPDF=False):
@@ -483,7 +429,7 @@ def compoundLnlike(params, observables, standoffDists, tofRanges, tofBinnings,
     
     
 # PARAMETER BOUNDARIES
-min_beamE, max_beamE = 1825.0, 1925.0 # see lab book pg54, date 1/24/16 - 2070 field of 139.091 mT gives expected Ed = 1.8784 MeV
+min_beamE, max_beamE = 1500.0, 2000.0 # see lab book pg54, date 1/24/16 - 2070 field of 139.091 mT gives expected Ed = 1.8784 MeV
 min_eLoss, max_eLoss = 600.0,1000.0
 min_scale, max_scale = 40.0, 300.0
 min_s, max_s = 0.1, 1.2
@@ -601,7 +547,7 @@ for i in range(nRuns):
 
 
 beamE_guess = 1878.4 # initial deuteron energy, in keV
-eLoss_guess = 850.0 # width of initial deuteron energy spread
+eLoss_guess = 800.0 # width of initial deuteron energy spread
 scale_guess = 170.0
 s_guess = 0.5
 
@@ -609,7 +555,7 @@ paramGuesses = [beamE_guess, eLoss_guess, scale_guess, s_guess]
 #badGuesses = [e0_bad, sigma0_bad, skew_bad]
 scaleFactor_guesses = []
 for i in range(nRuns):
-    scaleFactor_guesses.append(0.7 * np.sum(observedTOF[i]))
+    scaleFactor_guesses.append(2 * np.sum(observedTOF[i]))
     paramGuesses.append(np.sum(observedTOF[i]))
     #badGuesses.append(np.sum(observedTOF[i]))
 
@@ -620,34 +566,13 @@ for i in range(nRuns):
 
 nSamples = 200000
 
-# COMMENT BLOCK FROM OLD, OLD VERSION
-# SHOULDNT HAVE COPIED FROM advIntermediateTOFmodel
-# this code block pertains to _that_ implementation
-# generate fake data
-# nSamples = 100000
-# fakeData = generateModelData([mp_e0_guess, mp_sigma_0_guess],
-#                               standoff[runNumber], 
-#                               ddnXSinstance, stoppingModel.dEdx, nSamples)
 
-# plot the TOF
-# tofbins = np.linspace(tof_minRange, tof_maxRange, tof_nBins)
-# fig, ax = plot.subplots(figsize=(8.5,5.25))
-# ax.scatter(tofbins, observedTOF,color='green', label='Real data')
-# ax.scatter(tofbins, fakeData, color='red', label='Fake data')
-# ax.set_ylabel('counts')
-# ax.set_xlabel('TOF (ns)')
-# ax.set_xlim(tof_minRange,tof_maxRange)
-
-# ax.legend(loc='best', frameon=False, numpoints=1)
-# plot.draw()
-
-# plot.show()
 
 
 if not useMPI:
     if debugging and doPlotting:
         nSamples = 5000
-        fakeData1 = generateModelData([beamE_guess, eLoss_guess, scale_guess, s_guess, 5000], 
+        fakeData1 = generateModelData([beamE_guess, eLoss_guess, scale_guess, s_guess, 5000, bgLevel_guesses[0]], 
                                      standoffs[0], tof_range[0], tofRunBins[0], 
                                         ddnXSinstance, stoppingModel.dEdx, beamTiming,
                                         5000, getPDF=True)
@@ -662,12 +587,12 @@ if not useMPI:
     
     
     if not batchMode:
-        fakeData = [generateModelData([beamE_guess, eLoss_guess, scale_guess, s_guess, sfGuess],
+        fakeData = [generateModelData([beamE_guess, eLoss_guess, scale_guess, s_guess, sfGuess, bgGuess],
                                       standoff, tofrange, tofbins, 
                                       ddnXSinstance, stoppingModel.dEdx, beamTiming,
                                       nSamples, getPDF=True) for 
-                                      sfGuess, standoff, tofrange, tofbins in 
-                                      zip(scaleFactor_guesses, standoffs, tof_range,
+                                      sfGuess, bgGuess, standoff, tofrange, tofbins in 
+                                      zip(scaleFactor_guesses, bgLevel_guesses, standoffs, tof_range,
                                           tofRunBins)]
 
         if doPlotting:
@@ -693,4 +618,19 @@ if not useMPI:
             
             plot.draw()
             
+            plot.show()
+
+            fig, ax = plot.subplots(figsize=(8.5,5.25))
+            tofbins = []
+            for idx in range(len(tof_minRange)):
+                tofbins.append(np.linspace(tof_minRange[idx], tof_maxRange[idx], tofRunBins[idx]))
+            ax.set_xlim(min(tof_minRange), max(tof_maxRange))
+            for i in range(len(tof_minRange)):
+                plot.scatter(tofbins[i], observedTOF[i],color=runColors[i], label='Exp. data')
+                plot.scatter(tofbins[i], fakeData[i], edgecolors=runColors[i], facecolors='none', label='Fake data')
+            ax.legend( loc='best', frameon=False, ncol=2, numpoints=1)
+
+            ax.set_xlabel('TOF (ns)')
+
+            plot.draw()
             plot.show()

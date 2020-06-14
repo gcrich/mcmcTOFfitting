@@ -63,6 +63,8 @@ argParser.add_argument('-forceCustomPDF', choices=[0,1], default=0, type=int)
 argParser.add_argument('-nDrawsPerEval', default=200000, type=int) # number of draws from distribution used in each evaluation of the likelihood function
 argParser.add_argument('-nBurninSteps', default=400, type=int)
 argParser.add_argument('-nMainSteps', default=100, type=int)
+argParser.add_argument('-outputPrefix', type=str, default='')
+argParser.add_argument('-qnd', type=int, default=0, choices=[0,1], help='Quick and dirty (0,1): reduce binning behind the scenes')
 
 parsedArgs = argParser.parse_args()
 runNumber = parsedArgs.run
@@ -73,6 +75,8 @@ nThreads = parsedArgs.nThreads
 nDrawsPerEval = parsedArgs.nDrawsPerEval
 burninSteps = parsedArgs.nBurninSteps
 mcIterations = parsedArgs.nMainSteps
+outputPrefix = parsedArgs.outputPrefix
+quickAndDirty = True if parsedArgs.qnd == 1 else 0
 
 # batchMode turns off plotting and extraneous stuff like test NLL eval at beginning 
 batchMode = False
@@ -98,6 +102,12 @@ if nMPInodes > 0:
 if useMPI:
     from emcee.utils import MPIPool
 
+#
+# SHOULD PROBABLY PRINT OUT HOW WE ARE RUNNING JUST FOR CLARITY
+# for now.. just.. some specific things since god im stressed
+#
+if quickAndDirty == True:
+    print('\n\nRUNNING IN QUICK AND DIRTY MODE\n\n')
 
 ####################
 # CHECK TO SEE IF WE ARE USING PYTHON VERSION 2.7 OR ABOVE
@@ -164,9 +174,11 @@ tofRunBins = [tof_nBins['close'],
 
 
 # range of eD expanded for seemingly higher energy oneBD neutron beam
-eD_bins = 70
+eD_bins = 50
+# if quickAndDirty == True:
+#     eD_bins = 20
 eD_minRange = 200.0
-eD_maxRange = 1600.0
+eD_maxRange = 1200.0
 eD_range = (eD_minRange, eD_maxRange)
 eD_binSize = (eD_maxRange - eD_minRange)/eD_bins
 eD_binCenters = np.linspace(eD_minRange + eD_binSize/2,
@@ -175,6 +187,8 @@ eD_binCenters = np.linspace(eD_minRange + eD_binSize/2,
 
 
 x_bins = 10
+# if quickAndDirty == True:
+#     x_bins = 5
 x_minRange = 0.0
 x_maxRange = distances.tunlSSA_CsI_oneBD.cellLength
 x_range = (x_minRange,x_maxRange)
@@ -574,9 +588,9 @@ for i in range(nRuns):
 
 
 beamE_guess = 1860.0 # initial deuteron energy, in keV
-eLoss_guess = 800.0 # width of initial deuteron energy spread
+eLoss_guess = 850.0 # width of initial deuteron energy spread
 scale_guess = 180.0
-s_guess = 0.3
+s_guess = 0.6
 
 paramGuesses = [beamE_guess, eLoss_guess, scale_guess, s_guess]
 #badGuesses = [e0_bad, sigma0_bad, skew_bad]
@@ -592,6 +606,8 @@ for i in range(nRuns):
     paramGuesses.append(10)
 
 nSamples = 200000
+if quickAndDirty == True:
+    nSamples = 50000
 
 
 
@@ -672,11 +688,25 @@ if not useMPI:
             testProb = lnprob(paramGuesses, observedTOF, standoffs, tof_range, tofRunBins)
             print('got test lnprob {0}'.format(testProb))
 
-nDim, nWalkers = 9, 256
+
+if quitEarly:
+    quit()
+
+#
+# HERE'S WHERE THE MCMC SAMPLING LIVES
+#
+if outputPrefix == '':
+    burninChainFilename = 'burninchain.dat'
+    mainChainFilename = 'mainchain.dat'
+else:
+    burninChainFilename = outputPrefix + '_burninchain.dat'
+    mainChainFilename = outputPrefix + '_mainchain.dat'
+
+nDim, nWalkers = len(paramGuesses), 256
 if debugging:
     nWalkers = 2 * nDim
 
-p0agitators = [10, 50, 20, 0.1]
+p0agitators = [10, 50, 20, 0.05]
 for guess in paramGuesses[4:]:
     p0agitators.append(guess * 0.15)
 
@@ -689,7 +719,7 @@ sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob,
                                             'tofRanges': tof_range,
                                             'nTOFbins': tofRunBins},
                                     threads=nThreads)
-fout = open('burninchain.dat','w')
+fout = open(burninChainFilename,'w')
 fout.close()
 
 if debugging:
@@ -700,10 +730,13 @@ for i,samplerOut in enumerate(sampler.sample(p0, iterations=burninSteps)):
     if not useMPI or processPool.is_master():
         burninPos, burninProb, burninRstate = samplerOut
         print('running burn-in step {0} of {1}...'.format(i, burninSteps))
-        fout = open("burninchain.dat", "a")
+        fout = open(burninChainFilename, "a")
         for k in range(burninPos.shape[0]):
             fout.write("{0} {1} {2}\n".format(k, burninPos[k], burninProb[k]))
         fout.close()
+
+
+e0_only = False
 
 if doPlotting:
     # save an image of the burn in sampling
@@ -721,5 +754,84 @@ if doPlotting:
         plot.plot( sampler.chain[:,:,0].T, '-', color='k', alpha=0.2)
         plot.ylabel(r'$E_0$ (keV)')
         plot.xlabel('Step')
-    plot.savefig('emceeBurninSampleChainsOut.png',dpi=300)
+    plot.savefig(outputPrefix + 'emceeBurninSampleChainsOut.png',dpi=300)
     plot.draw()
+
+
+if not useMPI or processPool.is_master():
+    fout = open(mainChainFilename,'w')
+    fout.close()
+
+sampler.reset()
+
+if debugging:
+    mcIterations = 10
+for i,samplerResult in enumerate(sampler.sample(burninPos, lnprob0=burninProb, rstate0=burninRstate, iterations=mcIterations)):
+    #if (i+1)%2 == 0:
+    #    print("{0:5.1%}".format(float(i)/mcIterations))
+    print('running step {0} of {1} in main chain'.format(i, mcIterations))
+    fout = open(mainChainFilename,'a')
+    pos=samplerResult[0]
+    prob = samplerResult[1]
+    for k in range(pos.shape[0]):
+        fout.write("{0} {1} {2}\n".format(k, pos[k], prob[k]))
+    fout.close()
+
+    
+if useMPI:
+    processPool.close()
+    
+
+
+samples = sampler.chain[:,:,:].reshape((-1,nDim))
+
+if not e0_only:
+    # Compute the quantiles.
+    # this comes from https://github.com/dfm/emcee/blob/master/examples/line.py
+    quartileResults = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]),
+                          zip(*np.percentile(samples, [16, 50, 84], axis=0)))
+
+    ed_mcmc, loc_mcmc, scale_mcmc, s_mcmc = quartileResults[:4]
+    print("""MCMC result:
+        E_D initial = {0[0]} +{0[1]} -{0[2]}
+        loc = {1[0]} +{1[1]} -{1[2]}
+        scale = {2[0]} + {2[1]} - {2[2]}
+        s = {3[0]} + {3[1]} - {3[2]}
+        """.format(ed_mcmc, loc_mcmc, scale_mcmc, s_mcmc))
+    
+    
+#    import corner as corn
+#    cornerFig = corn.corner(samples,labels=["$E_0$","$\sigma_0$, skew"],
+#                            quantiles=[0.16,0.5,0.84], show_titles=True,
+#                            title_kwargs={'fontsize': 12})
+#    cornerFig.savefig('emceeRunCornerOut.png',dpi=300)
+else:
+    getQuartilesFromPercentiles = lambda v:(v[1], v[2]-v[1],v[1]-v[0])
+
+    e0_mcmc = getQuartilesFromPercentiles(np.percentile(samples, [16,50,84], axis=0).T[0,:])
+    print("""MCMC result:
+        E0 = {0[0]} +{0[1]} -{0[2]}
+        """.format(e0_mcmc))
+        
+        
+if doPlotting:
+    if not e0_only:
+        plot.figure()
+        plot.subplot(311)
+        plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
+        plot.ylabel(r'$E_0$ (keV)')
+        plot.subplot(312)
+        plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
+        plot.ylabel(r'$\sigma_0$ (keV)')
+        plot.subplot(313)
+        plot.plot(sampler.chain[:,:,2].T,'-',color='k',alpha=0.2)
+        plot.ylabel(r'skew')
+        plot.xlabel('Step')
+    else:
+        plot.figure()
+        plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
+        plot.ylabel(r'$E_0$ (keV)')
+        plot.xlabel('Step')
+    plot.savefig(outputPrefix + 'emceeRunSampleChainsOut.png',dpi=300)
+    plot.draw()    
+    plot.show()

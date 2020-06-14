@@ -280,6 +280,40 @@ class beamTimingShape:
         """
         return np.convolve(tofDistribution, self.timingDistribution, 'same')
 
+    class gaussianTiming:
+        """
+        Applies a Gaussian spread in time
+
+        TODO: check that there's not an issue in evaluation at bin centers, potentially need to use CDF over bin, rather than bin center?
+        """
+        def __init__(self, timingSigma=1, timingBinWidth=1):
+            self.sigma = timingSigma
+            self.tofBinWidth = timingBinWidth
+
+            # self.windowRange_min = np.ceil(-1.0 * 5 * self.sigma)
+            # self.windowRange_max = np.ceil( 5 * self.sigma)
+            # self.window_nBins = int((self.windowRange_max - self.windowRange_min)/self.tofBinWidth)
+    
+            # self.binCenters = np.linspace( (self.windowRange_min +
+            #                             self.tofBinWidth/2),
+            #                           (self.windowRange_max -
+            #                            self.tofBinWidth/2), self.window_nBins)
+            #
+            # HARDCODING BINNING ugly but ugh im in a rush
+            self.binCenters = np.linspace(-20,20,11,True)
+            
+            tempSpread = np.exp(-(self.binCenters / self.sigma)**2/2)
+            self.timingDistribution = normalizeVec(tempSpread)
+            print('\n{}\n'.format(self.binCenters))
+            print('{}\n'.format(self.timingDistribution))
+        
+        def applySpreading(self, tofDistribution):
+            """
+            Actually apply the spreading 
+
+            TODO: learn how python class method inheritance works (embarrassing)
+            """
+            return np.convolve(tofDistribution, self.timingDistribution, 'same')
 
 
 class ddnXSinterpolator:

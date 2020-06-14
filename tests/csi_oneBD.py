@@ -163,10 +163,10 @@ tofRunBins = [tof_nBins['close'],
                 tof_nBins['far']]
 
 
-
-eD_bins = 50
+# range of eD expanded for seemingly higher energy oneBD neutron beam
+eD_bins = 70
 eD_minRange = 200.0
-eD_maxRange = 1200.0
+eD_maxRange = 1600.0
 eD_range = (eD_minRange, eD_maxRange)
 eD_binSize = (eD_maxRange - eD_minRange)/eD_bins
 eD_binCenters = np.linspace(eD_minRange + eD_binSize/2,
@@ -190,7 +190,15 @@ data_x = np.repeat(x_binCenters,nEvPerLoop)
 
 
 ddnXSinstance = ddnXSinterpolator()
-beamTiming = beamTimingShape()
+# 
+# SET UP THE BEAM TIMING SPREAD
+# 
+# for one-BD data, binning is 4ns
+# spread, based on TF1 fits to gamma peak, is ~4 ns
+# to incorporate potential binning errors, maybe 4+4 in quadrature? (this is ~5.65)
+# this is perhaps not where binning errors should be accommodated
+# anyway, first arg sets timing spread sigma
+beamTiming = beamTimingShape.gaussianTiming(4, 4)
 zeroDegTimeSpreader = zeroDegreeTimingSpread()
 
 # stopping power model and parameters
@@ -261,29 +269,41 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
         odesolver = ode( dedxForODE ).set_integrator('dopri5').set_initial_value(eZeros)
         for idx, xEvalPoint in enumerate(x_binCenters):
             sol = odesolver.integrate( xEvalPoint )
+            #
+            # STUFF FOR DEBUGGING
+            #
             #print('shape of returned ode solution {}, first 10 entries {}'.format(sol.shape, sol[:10]))
-                #data_eD_matrix = odesolver.integrate( x_binCenters )
+            # data_eD_matrix = odesolver.integrate( x_binCenters )
                 #print('shape of returned ode solution {}, first 10 entries {}'.format(data_eD_matrix.shape, data_eD_matrix[:10]))
-                #data_eD = data_eD_matrix.flatten('K')
+            # data_eD = data_eD_matrix.flatten('K')
+            #
+            # END STUFF FOR DEBUGGING
+            #
             data_weights = ddnXSfxn.evaluate(sol)
             hist, edEdges = np.histogram( sol, bins=eD_bins, range=(eD_minRange, eD_maxRange), weights=data_weights)
             dataHist[idx,:] += hist
+    #
+    # DEBUGGING
+    #
 #    print('length of data_x {} length of data_eD {} length of weights {}'.format(
 #          len(data_x), len(data_eD), len(data_weights)))
-#dataHist2d, xedges, yedges = np.histogram2d( data_x, data_eD,
+#     dataHist2d, xedges, yedges = np.histogram2d( data_x, data_eD,
 #                                               [x_bins, eD_bins],
 #                                               [[x_minRange,x_maxRange],[eD_minRange,eD_maxRange]],
 #                                               weights=data_weights)
-#        dataHist += dataHist2d # element-wise, in-place addition
+#     dataHist += dataHist2d # element-wise, in-place addition
 
 
             
-#    print('linalg norm value {}'.format(np.linalg.norm(dataHist)))
-#    dataHist = dataHist / np.linalg.norm(dataHist)
-#    print('sum of data hist {}'.format(np.sum(dataHist*eD_binSize*x_binSize)))
-    dataHist /= np.sum(dataHist*eD_binSize*x_binSize)
-#    plot.matshow(dataHist)
-#    plot.show()
+# #    print('linalg norm value {}'.format(np.linalg.norm(dataHist)))
+#     dataHist = dataHist / np.linalg.norm(dataHist)
+# #    print('sum of data hist {}'.format(np.sum(dataHist*eD_binSize*x_binSize)))
+#     dataHist /= np.sum(dataHist*eD_binSize*x_binSize)
+#     plot.matshow(dataHist)
+#     plot.show()
+    #
+    # END DEBUGGING
+    #
     e0mean = np.mean(eZeros)
     drawHist2d = (np.rint(dataHist * nSamples)).astype(int)
     tofs = []
@@ -419,7 +439,7 @@ def lnlike(params, observables, standoffDist, range_tof, nBins_tof,
 def compoundLnlike(params, observables, standoffDists, tofRanges, tofBinnings, 
                    nDraws=200000):
     """Compute the joint likelihood of the model with each of the runs at different standoffs"""
-    paramSets = [[params[0], params[1], params[2], params[3], scale, bgLevel] for scale, bgLevel in zip(params[4:])]
+    paramSets = [[params[0], params[1], params[2], params[3], scale, bgLevel] for scale, bgLevel in zip(params[4:-nRuns], params[-nRuns:])]
     loglike = [lnlike(paramSet, obsSet, standoff, tofrange, tofbin, nDraws) for
                paramSet, obsSet, standoff, tofrange, tofbin in 
                zip(paramSets, observables, standoffDists, tofRanges, 
@@ -439,7 +459,7 @@ paramRanges.append((min_eLoss, max_eLoss))
 paramRanges.append((min_scale, max_scale))
 paramRanges.append((min_s, max_s))
 for i in range(nRuns):
-    paramRanges.append( (0.0, 1.0e6) ) # scale factors are all allowed to go between 0 and 30000  (??) for now
+    paramRanges.append( (1e3, 1.0e8) ) # scale factors are all allowed to go between 0 and 30000  (??) for now
 for i in range(nRuns):
     paramRanges.append( (0.0, 1e3) ) # background levels
     
@@ -449,6 +469,13 @@ def lnprior(theta):
     # run through list of params and if any are outside of allowed range, immediately return -inf
     for idx, paramVal in enumerate(theta):
         if paramVal < paramRanges[idx][0] or paramVal > paramRanges[idx][1]:
+            #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            # DEBUGGING
+            #
+            # print('param {} has value {} - OUT OF RANGE\n'.format(idx, paramVal))
+            #
+            # DEBUGGING
+            #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             return -inf
     return 0
     
@@ -546,16 +573,16 @@ for i in range(nRuns):
     observedTOFbinEdges.append(tofData[:,0][(binEdges>=tof_minRange[i])&(binEdges<tof_maxRange[i])])
 
 
-beamE_guess = 1878.4 # initial deuteron energy, in keV
+beamE_guess = 1860.0 # initial deuteron energy, in keV
 eLoss_guess = 800.0 # width of initial deuteron energy spread
-scale_guess = 170.0
-s_guess = 0.5
+scale_guess = 180.0
+s_guess = 0.3
 
 paramGuesses = [beamE_guess, eLoss_guess, scale_guess, s_guess]
 #badGuesses = [e0_bad, sigma0_bad, skew_bad]
 scaleFactor_guesses = []
 for i in range(nRuns):
-    scaleFactor_guesses.append(2 * np.sum(observedTOF[i]))
+    scaleFactor_guesses.append(3 * np.sum(observedTOF[i]))
     paramGuesses.append(np.sum(observedTOF[i]))
     #badGuesses.append(np.sum(observedTOF[i]))
 
@@ -634,3 +661,65 @@ if not useMPI:
 
             plot.draw()
             plot.show()
+
+        if debugging:
+            nll = lambda *args: -compoundLnlike(*args)
+            
+            
+            testNLL = nll(paramGuesses, observedTOF, standoffs, tof_range, tofRunBins)
+            print('test NLL has value {0}'.format(testNLL))
+            
+            testProb = lnprob(paramGuesses, observedTOF, standoffs, tof_range, tofRunBins)
+            print('got test lnprob {0}'.format(testProb))
+
+nDim, nWalkers = 9, 256
+if debugging:
+    nWalkers = 2 * nDim
+
+p0agitators = [10, 50, 20, 0.1]
+for guess in paramGuesses[4:]:
+    p0agitators.append(guess * 0.15)
+
+p0 = [paramGuesses + p0agitators*np.random.randn(nDim) for i in range(nWalkers)]
+
+# NOTE: i am not copying over the MPI-enabled stuff right now
+sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 
+                                    kwargs={'observables': observedTOF,
+                                            'standoffDists': standoffs,
+                                            'tofRanges': tof_range,
+                                            'nTOFbins': tofRunBins},
+                                    threads=nThreads)
+fout = open('burninchain.dat','w')
+fout.close()
+
+if debugging:
+    burninSteps = 10
+print('\n\n\nRUNNING BURN IN WITH {0} STEPS\n\n\n'.format(burninSteps))
+
+for i,samplerOut in enumerate(sampler.sample(p0, iterations=burninSteps)):
+    if not useMPI or processPool.is_master():
+        burninPos, burninProb, burninRstate = samplerOut
+        print('running burn-in step {0} of {1}...'.format(i, burninSteps))
+        fout = open("burninchain.dat", "a")
+        for k in range(burninPos.shape[0]):
+            fout.write("{0} {1} {2}\n".format(k, burninPos[k], burninProb[k]))
+        fout.close()
+
+if doPlotting:
+    # save an image of the burn in sampling
+    if not e0_only:
+        plot.figure()
+        plot.subplot(211)
+        plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
+        plot.ylabel(r'$E_0$ (keV)')
+        plot.subplot(212)
+        plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
+        plot.ylabel(r'$\sigma_0$ (keV)')
+        plot.xlabel('Step')
+    else:
+        plot.figure()
+        plot.plot( sampler.chain[:,:,0].T, '-', color='k', alpha=0.2)
+        plot.ylabel(r'$E_0$ (keV)')
+        plot.xlabel('Step')
+    plot.savefig('emceeBurninSampleChainsOut.png',dpi=300)
+    plot.draw()

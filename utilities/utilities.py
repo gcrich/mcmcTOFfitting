@@ -304,8 +304,8 @@ class beamTimingShape:
             
             tempSpread = np.exp(-(self.binCenters / self.sigma)**2/2)
             self.timingDistribution = normalizeVec(tempSpread)
-            print('\n{}\n'.format(self.binCenters))
-            print('{}\n'.format(self.timingDistribution))
+            # print('\n{}\n'.format(self.binCenters))
+            # print('{}\n'.format(self.timingDistribution))
         
         def applySpreading(self, tofDistribution):
             """

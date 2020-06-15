@@ -169,8 +169,8 @@ class betheApprox:
 
         self.stoppingSpline = RectBivariateSpline( self.edgrid, self.x_binCenters, self.z)
 
-    def evalStopped(self, params):
+    def evalStopped(self, eZero, xLoc):
         """
         Evaluate the stopped beam at different locations
         """
-        return self.stoppingSpline(params)
+        return self.stoppingSpline(eZero, xLoc)

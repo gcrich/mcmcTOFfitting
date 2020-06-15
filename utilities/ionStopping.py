@@ -93,6 +93,7 @@ class ionStopping:
 #                                                             self.fixedFactor,
 #                                                             np.log(logArg)))
             return stopping
+
             
 def getHavarStopping():
     materials = []
@@ -141,3 +142,35 @@ def getHavarStopping():
     for mat in materials:
         havar.addMaterial( mat )
     return havar
+
+class betheApprox:
+    """
+    Approximate Bethe stopping in specific case, using a bivariate spline
+    """
+    from scipy.integrate import ode
+    from scipy.interpolate import RectBivariateSpline
+
+    def __init__(self, params):
+        self.betheModel, eD_binInfo, self.x_binCenters = params
+        dedxfxn = self.betheModel.dEdx
+        dedxForODE = lambda x, y: dedxfxn(energy=y,x=x)
+
+        eDstep, eD_minRange, eD_maxRange = eD_binInfo
+
+        self.edgrid = np.arange(eD_minRange, eD_maxRange, eDstep)
+
+        z = np.zeros(len(self.x_binCenters))
+
+        for eZero in self.edgrid:
+            solver = ode(dedxForODE).set_integrator('dopri5').set_initial_value(eZero)
+            thisSolution = np.array([solver.integrate(x) for x in self.x_binCenters])
+            z = np.vstack((z,thisSolution.flatten()))
+        self.z = z[1:]
+
+        self.stoppingSpline = RectBivariateSpline( self.edgrid, self.x_binCenters, self.z)
+
+    def evalStopped(self, params):
+        """
+        Evaluate the stopped beam at different locations
+        """
+        return self.stoppingSpline(params)

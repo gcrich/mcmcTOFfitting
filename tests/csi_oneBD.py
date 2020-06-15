@@ -886,8 +886,11 @@ if not useMPI or processPool.is_master():
 
 sampler.reset()
 
-if debugging and mcIterations != 100:
-    mcIterations = 10
+if debugging:
+    if parsedArgs.nMainSteps != 100:
+        mcIterations = 10
+    else:
+        mcIterations = parsedArgs.nMainSteps
 for i,samplerResult in enumerate(sampler.sample(burninPos, lnprob0=burninProb, rstate0=burninRstate, iterations=mcIterations)):
     #if (i+1)%2 == 0:
     #    print("{0:5.1%}".format(float(i)/mcIterations))
@@ -910,8 +913,8 @@ samples = sampler.chain[:,:,:].reshape((-1,nDim))
 if not e0_only:
     # Compute the quantiles.
     # this comes from https://github.com/dfm/emcee/blob/master/examples/line.py
-    quartileResults = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]),
-                          zip(*np.percentile(samples, [16, 50, 84], axis=0)))
+    quartileResults = list(map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]),
+                          zip(*np.percentile(samples, [16, 50, 84], axis=0))))
 
     ed_mcmc, loc_mcmc, scale_mcmc, s_mcmc = quartileResults[:4]
     print("""MCMC result:

@@ -15,6 +15,8 @@
 from constants.constants import (physics,masses)
 import numpy as np
 import scipy.constants as sciConsts
+from scipy.integrate import ode
+from scipy.interpolate import RectBivariateSpline
 
 # something worth noting, mean excitation potential for D2 is 19.2
 # according to: http://pdg.lbl.gov/2016/AtomicNuclearProperties/HTML/deuterium_gas.html
@@ -93,7 +95,44 @@ class ionStopping:
 #                                                             self.fixedFactor,
 #                                                             np.log(logArg)))
             return stopping
+
             
+
+
+    class betheApprox:
+        """
+        Approximate Bethe stopping in specific case, using a bivariate spline
+        """
+        
+
+        def __init__(self, modelToApproximate, eD_binInfo, xBinCenters):
+            self.betheModel = modelToApproximate
+            self.x_binCenters = xBinCenters
+            dedxfxn = self.betheModel.dEdx
+            dedxForODE = lambda x, y: dedxfxn(energy=y,x=x)
+
+            # eDstep, eD_minRange, eD_maxRange = eD_binInfo
+            eDstep = 50
+            eD_minRange = 400.
+            eD_maxRange = 1200.
+            self.edgrid = np.arange(eD_minRange, eD_maxRange, eDstep)
+
+            z = np.zeros(len(self.x_binCenters))
+
+            for eZero in self.edgrid:
+                solver = ode(dedxForODE).set_integrator('dopri5').set_initial_value(eZero)
+                thisSolution = np.array([solver.integrate(x) for x in self.x_binCenters])
+                z = np.vstack((z,thisSolution.flatten()))
+            self.z = z[1:]
+
+            self.stoppingSpline = RectBivariateSpline( self.edgrid, self.x_binCenters, self.z)
+
+        def evalStopped(self, eZero, xLoc):
+            """
+            Evaluate the stopped beam at different locations
+            """
+            return self.stoppingSpline(eZero, xLoc)
+
 def getHavarStopping():
     materials = []
     # Linear Formula: Co 42.5% / Cr 19.5% / Ni 12.7% / W 2.8 % / Mo 2.6% / Mn 1.6% / Fe- balance (18.3%)

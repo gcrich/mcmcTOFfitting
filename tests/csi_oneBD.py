@@ -27,6 +27,7 @@ import numpy as np
 from numpy import inf
 import scipy.optimize as optimize
 from scipy.integrate import ode
+from scipy.interpolate import RectBivariateSpline
 from scipy.stats import (poisson, norm, lognorm)
 import scipy.special as special
 #from scipy.stats import skewnorm
@@ -43,6 +44,7 @@ from utilities.utilities import readMultiStandoffTOFdata
 from utilities.ionStopping import ionStopping
 from math import isnan
 import gc
+#from fast_histogram import histogram1d
 
 
 TESTONLY = True
@@ -56,13 +58,15 @@ argParser.add_argument('-run',choices=[0,1,2,3],default=0,type=int)
 argParser.add_argument('-inputDataFilename', default=defaultInputDataFilename, type=str)
 argParser.add_argument('-mpi', default=0,type=int)
 argParser.add_argument('-debug', choices=[0,1], default=0,type=int)
-argParser.add_argument('-nThreads', default=3, type=int)
+argParser.add_argument('-nThreads', default=5, type=int)
 argParser.add_argument('-quitEarly', choices=[0,1], default=0, type=int)
 argParser.add_argument('-batch',choices=[0,1], default=0, type=int)
 argParser.add_argument('-forceCustomPDF', choices=[0,1], default=0, type=int)
 argParser.add_argument('-nDrawsPerEval', default=200000, type=int) # number of draws from distribution used in each evaluation of the likelihood function
 argParser.add_argument('-nBurninSteps', default=400, type=int)
 argParser.add_argument('-nMainSteps', default=100, type=int)
+argParser.add_argument('-outputPrefix', type=str, default='')
+argParser.add_argument('-qnd', type=int, default=0, choices=[0,1], help='Quick and dirty (0,1): reduce binning behind the scenes')
 
 parsedArgs = argParser.parse_args()
 runNumber = parsedArgs.run
@@ -73,6 +77,8 @@ nThreads = parsedArgs.nThreads
 nDrawsPerEval = parsedArgs.nDrawsPerEval
 burninSteps = parsedArgs.nBurninSteps
 mcIterations = parsedArgs.nMainSteps
+outputPrefix = parsedArgs.outputPrefix
+quickAndDirty = True if parsedArgs.qnd == 1 else 0
 
 # batchMode turns off plotting and extraneous stuff like test NLL eval at beginning 
 batchMode = False
@@ -97,6 +103,14 @@ if nMPInodes > 0:
     
 if useMPI:
     from emcee.utils import MPIPool
+
+#
+# SHOULD PROBABLY PRINT OUT HOW WE ARE RUNNING JUST FOR CLARITY
+# for now.. just.. some specific things since god im stressed
+#
+if quickAndDirty == True:
+    print('\n\nRUNNING IN QUICK AND DIRTY MODE\n\n')
+
 
 
 ####################
@@ -164,9 +178,11 @@ tofRunBins = [tof_nBins['close'],
 
 
 # range of eD expanded for seemingly higher energy oneBD neutron beam
-eD_bins = 70
+eD_bins = 50
+# if quickAndDirty == True:
+#     eD_bins = 20
 eD_minRange = 200.0
-eD_maxRange = 1600.0
+eD_maxRange = 1200.0
 eD_range = (eD_minRange, eD_maxRange)
 eD_binSize = (eD_maxRange - eD_minRange)/eD_bins
 eD_binCenters = np.linspace(eD_minRange + eD_binSize/2,
@@ -175,6 +191,8 @@ eD_binCenters = np.linspace(eD_minRange + eD_binSize/2,
 
 
 x_bins = 10
+# if quickAndDirty == True:
+#     x_bins = 5
 x_minRange = 0.0
 x_maxRange = distances.tunlSSA_CsI_oneBD.cellLength
 x_range = (x_minRange,x_maxRange)
@@ -183,10 +201,26 @@ x_binCenters = np.linspace(x_minRange + x_binSize/2,
                            x_maxRange - x_binSize/2,
                            x_bins)
 
+#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#
+# SETUP OF SOME SAMPLING PARAMETERS
+#
+# THESE CAN BE IMPORTANT IN PERFORMANCE
+#
+
+nSamples = 200000
+if quickAndDirty == True:
+    nSamples = 50000
+    nDrawsPerEval = nSamples
+
 # parameters for making the fake data...
-nEvPerLoop = 50000
+nEvPerLoop = 1000
 data_x = np.repeat(x_binCenters,nEvPerLoop)
 
+#
+#
+#
+#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 
 ddnXSinstance = ddnXSinterpolator()
@@ -216,7 +250,10 @@ stoppingModel = ionStopping.simpleBethe( stoppingModelParams )
 
     
 eN_binCenters = getDDneutronEnergy( eD_binCenters )
-    
+
+eD_stoppingApprox_binning = (100,1800,50)
+
+stoppingApprox = ionStopping.betheApprox(stoppingModel, eD_stoppingApprox_binning, x_binCenters)
 
     
 def getTOF(mass, energy, distance):
@@ -231,7 +268,7 @@ def getTOF(mass, energy, distance):
     
     
 
-def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
+def generateModelData_ode(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
                       dedxfxn, beamTimer, nSamples, getPDF=False):
     """
     Generate model data with cross-section weighting applied
@@ -326,6 +363,109 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
     # return step applies scaling and adds poisson-distributed background
     return scaleFactor * beamTimer.applySpreading(tofData) + np.random.poisson(bgLevel, nBins_tof)
 
+
+def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
+                      stoppingApprox, beamTimer, nSamples, getPDF=False):
+    """
+    Generate model data with cross-section weighting applied
+    ddnXSfxn is an instance of the ddnXSinterpolator class -
+    stoppingApprox - instance of betheApprox class
+    This is edited to accommodate multiple standoffs being passed 
+
+    bgLevel parameter treats flat background - it is the lambda parameter of a poisson that is sampled from in each TOF bin
+    """
+    beamE, eLoss, scale, s, scaleFactor, bgLevel = params
+    e0mean = 900.0
+    dataHist = np.zeros((x_bins, eD_bins))
+    
+    
+    nLoops = int(np.ceil(nSamples / nEvPerLoop))
+    solutions = np.zeros((nEvPerLoop,x_bins))
+    dataHist = np.zeros((x_bins,eD_bins))
+    for loopNum in range(0, nLoops):
+        #eZeros = np.random.normal( params[0], params[0]*params[1], nEvPerLoop )
+        #eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=nEvPerLoop)
+        eZeros = np.repeat(beamE, nEvPerLoop)
+        eZeros -= lognorm.rvs(s=s, loc=eLoss, scale=scale, size=nEvPerLoop)
+        # checkForBadEs = True
+        # while checkForBadEs:
+        #     badIdxs = np.where(eZeros <= 0.0)[0]
+        #     nBads = badIdxs.shape[0]
+        #     if nBads == 0:
+        #         checkForBadEs = False
+        #     replacements = np.repeat(beamE, nBads) - lognorm.rvs(s=s, loc=eLoss, scale=scale, size=nBads)
+        #     eZeros[badIdxs] = replacements
+
+#data_eD_matrix = odeint( dedxfxn, eZeros, x_binCenters )
+        #solutions = np.zeros((1,x_bins))
+        
+        for idx,eZero in enumerate(eZeros):
+            sol = stoppingApprox.evalStopped(eZero, x_binCenters)
+            #solutions = np.vstack((solutions,sol))
+            solutions[idx,:] = sol
+        #solutions = solutions[1:,:]
+
+        #dataHist = np.zeros(eD_bins)
+        
+        for idx,xStepSol in enumerate(solutions.T):
+            data_weights = ddnXSfxn.evaluate(xStepSol)
+            hist, edEdges = np.histogram(xStepSol, bins=eD_bins, range=(eD_minRange, eD_maxRange), weights=data_weights)
+            #dataHist = np.vstack((dataHist,hist))
+            dataHist[idx,:] = hist
+        #dataHist = dataHist[1:,:]
+    #
+    # DEBUGGING
+    #
+#    print('length of data_x {} length of data_eD {} length of weights {}'.format(
+#          len(data_x), len(data_eD), len(data_weights)))
+#     dataHist2d, xedges, yedges = np.histogram2d( data_x, data_eD,
+#                                               [x_bins, eD_bins],
+#                                               [[x_minRange,x_maxRange],[eD_minRange,eD_maxRange]],
+#                                               weights=data_weights)
+#     dataHist += dataHist2d # element-wise, in-place addition
+
+
+            
+# #    print('linalg norm value {}'.format(np.linalg.norm(dataHist)))
+#     dataHist = dataHist / np.linalg.norm(dataHist)
+# #    print('sum of data hist {}'.format(np.sum(dataHist*eD_binSize*x_binSize)))
+#     dataHist /= np.sum(dataHist*eD_binSize*x_binSize)
+#     plot.matshow(dataHist)
+#     plot.show()
+    #
+    # END DEBUGGING
+    #
+    e0mean = np.mean(eZeros)
+    drawHist2d = (np.rint(dataHist * nSamples)).astype(int)
+    #tofs = []
+    #tofWeights = []
+    tofs = np.zeros((x_bins,eD_bins))
+    tofWeights = np.zeros((x_bins,eD_bins))
+    #print('shape of drawHist2d {}\n'.format(drawHist2d.shape))
+    for index, weight in np.ndenumerate( drawHist2d ):
+        cellLocation = x_binCenters[index[0]]
+        effectiveDenergy = (e0mean + eD_binCenters[index[1]])/2
+        tof_d = getTOF( masses.deuteron, effectiveDenergy, cellLocation )
+        neutronDistance = (distances.tunlSSA_CsI.cellLength - cellLocation +
+                           standoffDistance )
+        tof_n = getTOF(masses.neutron, eN_binCenters[index[1]], neutronDistance)
+        # TODO: reimplement zero degree transit spread
+        #zeroD_times, zeroD_weights = zeroDegTimeSpreader.getTimesAndWeights( eN_binCenters[index[1]] )
+        #tofs.append( tof_d + tof_n + zeroD_times )
+        #tofWeights.append(weight * zeroD_weights)
+        tofs[index] = tof_d + tof_n #+ zeroD_times
+        tofWeights[index] = weight #* zeroD_weights
+    #!!!!!!!!
+    # debugging
+    #print('shape of tofs and tofWeights: {} {}\n'.format(len(tofs), len(tofWeights)))
+        # TODO: next line needs adjustment if using OLD NUMPY < 1.6.1 
+        # if lower than that, use the 'normed' arg, rather than 'density'
+    tofData, tofBinEdges = np.histogram( tofs.flatten(), bins=nBins_tof, range=range_tof,
+                                        weights=tofWeights.flatten(), density=getPDF)
+                                        
+    # return step applies scaling and adds poisson-distributed background
+    return scaleFactor * beamTimer.applySpreading(tofData) + np.random.poisson(bgLevel, nBins_tof)
+
     
 
 def genModelData_lowMem(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
@@ -405,13 +545,13 @@ def lnlikeHelp(evalData, observables):
 
 
 def lnlike(params, observables, standoffDist, range_tof, nBins_tof, 
-           nDraws=200000):
+           nDraws=nSamples):
     """
     Evaluate the log likelihood using xs-weighting
     """        
     #e0, sigma0 = params
     evalData = generateModelData(params, standoffDist, range_tof, nBins_tof,
-                                    ddnXSinstance, stoppingModel.dEdx,
+                                    ddnXSinstance, stoppingApprox,
                                     beamTiming, nDraws, True)
     binLikelihoods = []
     for binNum in range(len(observables)):
@@ -437,7 +577,7 @@ def lnlike(params, observables, standoffDist, range_tof, nBins_tof,
     
     
 def compoundLnlike(params, observables, standoffDists, tofRanges, tofBinnings, 
-                   nDraws=200000):
+                   nDraws=nSamples):
     """Compute the joint likelihood of the model with each of the runs at different standoffs"""
     paramSets = [[params[0], params[1], params[2], params[3], scale, bgLevel] for scale, bgLevel in zip(params[4:-nRuns], params[-nRuns:])]
     loglike = [lnlike(paramSet, obsSet, standoff, tofrange, tofbin, nDraws) for
@@ -547,7 +687,7 @@ def checkLikelihoodEval(observables, evalData):
         
     
     plot.draw()
-    plot.show()
+    #plot.show()
 
     
     
@@ -574,9 +714,9 @@ for i in range(nRuns):
 
 
 beamE_guess = 1860.0 # initial deuteron energy, in keV
-eLoss_guess = 800.0 # width of initial deuteron energy spread
+eLoss_guess = 850.0 # width of initial deuteron energy spread
 scale_guess = 180.0
-s_guess = 0.3
+s_guess = 0.6
 
 paramGuesses = [beamE_guess, eLoss_guess, scale_guess, s_guess]
 #badGuesses = [e0_bad, sigma0_bad, skew_bad]
@@ -591,23 +731,21 @@ for i in range(nRuns):
     bgLevel_guesses.append(10)
     paramGuesses.append(10)
 
-nSamples = 200000
-
 
 
 
 if not useMPI:
     if debugging and doPlotting:
-        nSamples = 5000
+        #nSamples = 5000
         fakeData1 = generateModelData([beamE_guess, eLoss_guess, scale_guess, s_guess, 5000, bgLevel_guesses[0]], 
                                      standoffs[0], tof_range[0], tofRunBins[0], 
-                                        ddnXSinstance, stoppingModel.dEdx, beamTiming,
-                                        5000, getPDF=True)
+                                        ddnXSinstance, stoppingApprox, beamTiming,
+                                        nEvPerLoop, getPDF=True)
         tofbins = np.linspace(tof_minRange[0], tof_maxRange[0], tofRunBins[0])
         plot.figure()
         plot.plot(tofbins, fakeData1)
         plot.draw()
-        plot.show()
+        #plot.show()
             
     
     # generate fake data
@@ -616,7 +754,7 @@ if not useMPI:
     if not batchMode:
         fakeData = [generateModelData([beamE_guess, eLoss_guess, scale_guess, s_guess, sfGuess, bgGuess],
                                       standoff, tofrange, tofbins, 
-                                      ddnXSinstance, stoppingModel.dEdx, beamTiming,
+                                      ddnXSinstance, stoppingApprox, beamTiming,
                                       nSamples, getPDF=True) for 
                                       sfGuess, bgGuess, standoff, tofrange, tofbins in 
                                       zip(scaleFactor_guesses, bgLevel_guesses, standoffs, tof_range,
@@ -645,7 +783,7 @@ if not useMPI:
             
             plot.draw()
             
-            plot.show()
+            #plot.show()
 
             fig, ax = plot.subplots(figsize=(8.5,5.25))
             tofbins = []
@@ -660,7 +798,7 @@ if not useMPI:
             ax.set_xlabel('TOF (ns)')
 
             plot.draw()
-            plot.show()
+            #plot.show()
 
         if debugging:
             nll = lambda *args: -compoundLnlike(*args)
@@ -672,11 +810,25 @@ if not useMPI:
             testProb = lnprob(paramGuesses, observedTOF, standoffs, tof_range, tofRunBins)
             print('got test lnprob {0}'.format(testProb))
 
-nDim, nWalkers = 9, 256
+
+if quitEarly:
+    quit()
+
+#
+# HERE'S WHERE THE MCMC SAMPLING LIVES
+#
+if outputPrefix == '':
+    burninChainFilename = 'burninchain.dat'
+    mainChainFilename = 'mainchain.dat'
+else:
+    burninChainFilename = outputPrefix + '_burninchain.dat'
+    mainChainFilename = outputPrefix + '_mainchain.dat'
+
+nDim, nWalkers = len(paramGuesses), 256
 if debugging:
     nWalkers = 2 * nDim
 
-p0agitators = [10, 50, 20, 0.1]
+p0agitators = [10, 50, 20, 0.05]
 for guess in paramGuesses[4:]:
     p0agitators.append(guess * 0.15)
 
@@ -689,7 +841,7 @@ sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob,
                                             'tofRanges': tof_range,
                                             'nTOFbins': tofRunBins},
                                     threads=nThreads)
-fout = open('burninchain.dat','w')
+fout = open(burninChainFilename,'w')
 fout.close()
 
 if debugging:
@@ -700,10 +852,13 @@ for i,samplerOut in enumerate(sampler.sample(p0, iterations=burninSteps)):
     if not useMPI or processPool.is_master():
         burninPos, burninProb, burninRstate = samplerOut
         print('running burn-in step {0} of {1}...'.format(i, burninSteps))
-        fout = open("burninchain.dat", "a")
+        fout = open(burninChainFilename, "a")
         for k in range(burninPos.shape[0]):
             fout.write("{0} {1} {2}\n".format(k, burninPos[k], burninProb[k]))
         fout.close()
+
+
+e0_only = False
 
 if doPlotting:
     # save an image of the burn in sampling
@@ -721,5 +876,84 @@ if doPlotting:
         plot.plot( sampler.chain[:,:,0].T, '-', color='k', alpha=0.2)
         plot.ylabel(r'$E_0$ (keV)')
         plot.xlabel('Step')
-    plot.savefig('emceeBurninSampleChainsOut.png',dpi=300)
+    plot.savefig(outputPrefix + 'emceeBurninSampleChainsOut.png',dpi=300)
     plot.draw()
+
+
+if not useMPI or processPool.is_master():
+    fout = open(mainChainFilename,'w')
+    fout.close()
+
+sampler.reset()
+
+if debugging and mcIterations != 100:
+    mcIterations = 10
+for i,samplerResult in enumerate(sampler.sample(burninPos, lnprob0=burninProb, rstate0=burninRstate, iterations=mcIterations)):
+    #if (i+1)%2 == 0:
+    #    print("{0:5.1%}".format(float(i)/mcIterations))
+    print('running step {0} of {1} in main chain'.format(i, mcIterations))
+    fout = open(mainChainFilename,'a')
+    pos=samplerResult[0]
+    prob = samplerResult[1]
+    for k in range(pos.shape[0]):
+        fout.write("{0} {1} {2}\n".format(k, pos[k], prob[k]))
+    fout.close()
+
+    
+if useMPI:
+    processPool.close()
+    
+
+
+samples = sampler.chain[:,:,:].reshape((-1,nDim))
+
+if not e0_only:
+    # Compute the quantiles.
+    # this comes from https://github.com/dfm/emcee/blob/master/examples/line.py
+    quartileResults = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]),
+                          zip(*np.percentile(samples, [16, 50, 84], axis=0)))
+
+    ed_mcmc, loc_mcmc, scale_mcmc, s_mcmc = quartileResults[:4]
+    print("""MCMC result:
+        E_D initial = {0[0]} +{0[1]} -{0[2]}
+        loc = {1[0]} +{1[1]} -{1[2]}
+        scale = {2[0]} + {2[1]} - {2[2]}
+        s = {3[0]} + {3[1]} - {3[2]}
+        """.format(ed_mcmc, loc_mcmc, scale_mcmc, s_mcmc))
+    
+    
+#    import corner as corn
+#    cornerFig = corn.corner(samples,labels=["$E_0$","$\sigma_0$, skew"],
+#                            quantiles=[0.16,0.5,0.84], show_titles=True,
+#                            title_kwargs={'fontsize': 12})
+#    cornerFig.savefig('emceeRunCornerOut.png',dpi=300)
+else:
+    getQuartilesFromPercentiles = lambda v:(v[1], v[2]-v[1],v[1]-v[0])
+
+    e0_mcmc = getQuartilesFromPercentiles(np.percentile(samples, [16,50,84], axis=0).T[0,:])
+    print("""MCMC result:
+        E0 = {0[0]} +{0[1]} -{0[2]}
+        """.format(e0_mcmc))
+        
+        
+if doPlotting:
+    if not e0_only:
+        plot.figure()
+        plot.subplot(311)
+        plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
+        plot.ylabel(r'$E_0$ (keV)')
+        plot.subplot(312)
+        plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
+        plot.ylabel(r'$\sigma_0$ (keV)')
+        plot.subplot(313)
+        plot.plot(sampler.chain[:,:,2].T,'-',color='k',alpha=0.2)
+        plot.ylabel(r'skew')
+        plot.xlabel('Step')
+    else:
+        plot.figure()
+        plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
+        plot.ylabel(r'$E_0$ (keV)')
+        plot.xlabel('Step')
+    plot.savefig(outputPrefix + 'emceeRunSampleChainsOut.png',dpi=300)
+    plot.draw()    
+    plot.show()

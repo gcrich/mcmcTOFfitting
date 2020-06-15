@@ -188,12 +188,14 @@ for loopNum in range(0, nLoops):
         noWeightHist, edEdges = np.histogram( sol, bins=eD_bins, range=(eD_minRange, eD_maxRange))
         unweightedDataHist[idx,:] += noWeightHist
 
-    solutions = np.zeros((1,x_bins))
-    for eZero in eZeros:
+#    solutions = np.zeros((1,x_bins))
+    solutions = np.zeros((len(eZeros),x_bins))
+    for idx,eZero in enumerate(eZeros):
         sol = interp_spline(eZero, x_binCenters)
-        solutions = np.vstack((solutions, sol))
+        #solutions = np.vstack((solutions, sol))
+        solutions[idx,:] = sol
     print('shape of solutions {}'.format(solutions.shape))
-    solutions = solutions[1:,:]
+    #solutions = solutions[1:,:]
     eSolList = []
     eSolArray = np.zeros(eD_bins)
     #for xStepSol in solutions[:,]:

@@ -27,6 +27,7 @@ import numpy as np
 from numpy import inf
 import scipy.optimize as optimize
 from scipy.integrate import ode
+from scipy.interpolate import RectBivariateSpline
 from scipy.stats import (poisson, norm, lognorm)
 import scipy.special as special
 #from scipy.stats import skewnorm
@@ -43,6 +44,7 @@ from utilities.utilities import readMultiStandoffTOFdata
 from utilities.ionStopping import ionStopping
 from math import isnan
 import gc
+#from fast_histogram import histogram1d
 
 
 TESTONLY = True
@@ -56,7 +58,7 @@ argParser.add_argument('-run',choices=[0,1,2,3],default=0,type=int)
 argParser.add_argument('-inputDataFilename', default=defaultInputDataFilename, type=str)
 argParser.add_argument('-mpi', default=0,type=int)
 argParser.add_argument('-debug', choices=[0,1], default=0,type=int)
-argParser.add_argument('-nThreads', default=3, type=int)
+argParser.add_argument('-nThreads', default=5, type=int)
 argParser.add_argument('-quitEarly', choices=[0,1], default=0, type=int)
 argParser.add_argument('-batch',choices=[0,1], default=0, type=int)
 argParser.add_argument('-forceCustomPDF', choices=[0,1], default=0, type=int)
@@ -108,6 +110,8 @@ if useMPI:
 #
 if quickAndDirty == True:
     print('\n\nRUNNING IN QUICK AND DIRTY MODE\n\n')
+
+
 
 ####################
 # CHECK TO SEE IF WE ARE USING PYTHON VERSION 2.7 OR ABOVE
@@ -197,10 +201,26 @@ x_binCenters = np.linspace(x_minRange + x_binSize/2,
                            x_maxRange - x_binSize/2,
                            x_bins)
 
+#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#
+# SETUP OF SOME SAMPLING PARAMETERS
+#
+# THESE CAN BE IMPORTANT IN PERFORMANCE
+#
+
+nSamples = 200000
+if quickAndDirty == True:
+    nSamples = 50000
+    nDrawsPerEval = nSamples
+
 # parameters for making the fake data...
-nEvPerLoop = 50000
+nEvPerLoop = 1000
 data_x = np.repeat(x_binCenters,nEvPerLoop)
 
+#
+#
+#
+#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 
 ddnXSinstance = ddnXSinterpolator()
@@ -230,7 +250,10 @@ stoppingModel = ionStopping.simpleBethe( stoppingModelParams )
 
     
 eN_binCenters = getDDneutronEnergy( eD_binCenters )
-    
+
+eD_stoppingApprox_binning = (100,1800,50)
+
+stoppingApprox = ionStopping.betheApprox(stoppingModel, eD_stoppingApprox_binning, x_binCenters)
 
     
 def getTOF(mass, energy, distance):
@@ -245,7 +268,7 @@ def getTOF(mass, energy, distance):
     
     
 
-def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
+def generateModelData_ode(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
                       dedxfxn, beamTimer, nSamples, getPDF=False):
     """
     Generate model data with cross-section weighting applied
@@ -340,6 +363,109 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
     # return step applies scaling and adds poisson-distributed background
     return scaleFactor * beamTimer.applySpreading(tofData) + np.random.poisson(bgLevel, nBins_tof)
 
+
+def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
+                      stoppingApprox, beamTimer, nSamples, getPDF=False):
+    """
+    Generate model data with cross-section weighting applied
+    ddnXSfxn is an instance of the ddnXSinterpolator class -
+    stoppingApprox - instance of betheApprox class
+    This is edited to accommodate multiple standoffs being passed 
+
+    bgLevel parameter treats flat background - it is the lambda parameter of a poisson that is sampled from in each TOF bin
+    """
+    beamE, eLoss, scale, s, scaleFactor, bgLevel = params
+    e0mean = 900.0
+    dataHist = np.zeros((x_bins, eD_bins))
+    
+    
+    nLoops = int(np.ceil(nSamples / nEvPerLoop))
+    solutions = np.zeros((nEvPerLoop,x_bins))
+    dataHist = np.zeros((x_bins,eD_bins))
+    for loopNum in range(0, nLoops):
+        #eZeros = np.random.normal( params[0], params[0]*params[1], nEvPerLoop )
+        #eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=nEvPerLoop)
+        eZeros = np.repeat(beamE, nEvPerLoop)
+        eZeros -= lognorm.rvs(s=s, loc=eLoss, scale=scale, size=nEvPerLoop)
+        # checkForBadEs = True
+        # while checkForBadEs:
+        #     badIdxs = np.where(eZeros <= 0.0)[0]
+        #     nBads = badIdxs.shape[0]
+        #     if nBads == 0:
+        #         checkForBadEs = False
+        #     replacements = np.repeat(beamE, nBads) - lognorm.rvs(s=s, loc=eLoss, scale=scale, size=nBads)
+        #     eZeros[badIdxs] = replacements
+
+#data_eD_matrix = odeint( dedxfxn, eZeros, x_binCenters )
+        #solutions = np.zeros((1,x_bins))
+        
+        for idx,eZero in enumerate(eZeros):
+            sol = stoppingApprox.evalStopped(eZero, x_binCenters)
+            #solutions = np.vstack((solutions,sol))
+            solutions[idx,:] = sol
+        #solutions = solutions[1:,:]
+
+        #dataHist = np.zeros(eD_bins)
+        
+        for idx,xStepSol in enumerate(solutions.T):
+            data_weights = ddnXSfxn.evaluate(xStepSol)
+            hist, edEdges = np.histogram(xStepSol, bins=eD_bins, range=(eD_minRange, eD_maxRange), weights=data_weights)
+            #dataHist = np.vstack((dataHist,hist))
+            dataHist[idx,:] = hist
+        #dataHist = dataHist[1:,:]
+    #
+    # DEBUGGING
+    #
+#    print('length of data_x {} length of data_eD {} length of weights {}'.format(
+#          len(data_x), len(data_eD), len(data_weights)))
+#     dataHist2d, xedges, yedges = np.histogram2d( data_x, data_eD,
+#                                               [x_bins, eD_bins],
+#                                               [[x_minRange,x_maxRange],[eD_minRange,eD_maxRange]],
+#                                               weights=data_weights)
+#     dataHist += dataHist2d # element-wise, in-place addition
+
+
+            
+# #    print('linalg norm value {}'.format(np.linalg.norm(dataHist)))
+#     dataHist = dataHist / np.linalg.norm(dataHist)
+# #    print('sum of data hist {}'.format(np.sum(dataHist*eD_binSize*x_binSize)))
+#     dataHist /= np.sum(dataHist*eD_binSize*x_binSize)
+#     plot.matshow(dataHist)
+#     plot.show()
+    #
+    # END DEBUGGING
+    #
+    e0mean = np.mean(eZeros)
+    drawHist2d = (np.rint(dataHist * nSamples)).astype(int)
+    #tofs = []
+    #tofWeights = []
+    tofs = np.zeros((x_bins,eD_bins))
+    tofWeights = np.zeros((x_bins,eD_bins))
+    #print('shape of drawHist2d {}\n'.format(drawHist2d.shape))
+    for index, weight in np.ndenumerate( drawHist2d ):
+        cellLocation = x_binCenters[index[0]]
+        effectiveDenergy = (e0mean + eD_binCenters[index[1]])/2
+        tof_d = getTOF( masses.deuteron, effectiveDenergy, cellLocation )
+        neutronDistance = (distances.tunlSSA_CsI.cellLength - cellLocation +
+                           standoffDistance )
+        tof_n = getTOF(masses.neutron, eN_binCenters[index[1]], neutronDistance)
+        # TODO: reimplement zero degree transit spread
+        #zeroD_times, zeroD_weights = zeroDegTimeSpreader.getTimesAndWeights( eN_binCenters[index[1]] )
+        #tofs.append( tof_d + tof_n + zeroD_times )
+        #tofWeights.append(weight * zeroD_weights)
+        tofs[index] = tof_d + tof_n #+ zeroD_times
+        tofWeights[index] = weight #* zeroD_weights
+    #!!!!!!!!
+    # debugging
+    #print('shape of tofs and tofWeights: {} {}\n'.format(len(tofs), len(tofWeights)))
+        # TODO: next line needs adjustment if using OLD NUMPY < 1.6.1 
+        # if lower than that, use the 'normed' arg, rather than 'density'
+    tofData, tofBinEdges = np.histogram( tofs.flatten(), bins=nBins_tof, range=range_tof,
+                                        weights=tofWeights.flatten(), density=getPDF)
+                                        
+    # return step applies scaling and adds poisson-distributed background
+    return scaleFactor * beamTimer.applySpreading(tofData) + np.random.poisson(bgLevel, nBins_tof)
+
     
 
 def genModelData_lowMem(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
@@ -419,13 +545,13 @@ def lnlikeHelp(evalData, observables):
 
 
 def lnlike(params, observables, standoffDist, range_tof, nBins_tof, 
-           nDraws=200000):
+           nDraws=nSamples):
     """
     Evaluate the log likelihood using xs-weighting
     """        
     #e0, sigma0 = params
     evalData = generateModelData(params, standoffDist, range_tof, nBins_tof,
-                                    ddnXSinstance, stoppingModel.dEdx,
+                                    ddnXSinstance, stoppingApprox,
                                     beamTiming, nDraws, True)
     binLikelihoods = []
     for binNum in range(len(observables)):
@@ -451,7 +577,7 @@ def lnlike(params, observables, standoffDist, range_tof, nBins_tof,
     
     
 def compoundLnlike(params, observables, standoffDists, tofRanges, tofBinnings, 
-                   nDraws=200000):
+                   nDraws=nSamples):
     """Compute the joint likelihood of the model with each of the runs at different standoffs"""
     paramSets = [[params[0], params[1], params[2], params[3], scale, bgLevel] for scale, bgLevel in zip(params[4:-nRuns], params[-nRuns:])]
     loglike = [lnlike(paramSet, obsSet, standoff, tofrange, tofbin, nDraws) for
@@ -561,7 +687,7 @@ def checkLikelihoodEval(observables, evalData):
         
     
     plot.draw()
-    plot.show()
+    #plot.show()
 
     
     
@@ -605,25 +731,21 @@ for i in range(nRuns):
     bgLevel_guesses.append(10)
     paramGuesses.append(10)
 
-nSamples = 200000
-if quickAndDirty == True:
-    nSamples = 50000
-
 
 
 
 if not useMPI:
     if debugging and doPlotting:
-        nSamples = 5000
+        #nSamples = 5000
         fakeData1 = generateModelData([beamE_guess, eLoss_guess, scale_guess, s_guess, 5000, bgLevel_guesses[0]], 
                                      standoffs[0], tof_range[0], tofRunBins[0], 
-                                        ddnXSinstance, stoppingModel.dEdx, beamTiming,
-                                        5000, getPDF=True)
+                                        ddnXSinstance, stoppingApprox, beamTiming,
+                                        nEvPerLoop, getPDF=True)
         tofbins = np.linspace(tof_minRange[0], tof_maxRange[0], tofRunBins[0])
         plot.figure()
         plot.plot(tofbins, fakeData1)
         plot.draw()
-        plot.show()
+        #plot.show()
             
     
     # generate fake data
@@ -632,7 +754,7 @@ if not useMPI:
     if not batchMode:
         fakeData = [generateModelData([beamE_guess, eLoss_guess, scale_guess, s_guess, sfGuess, bgGuess],
                                       standoff, tofrange, tofbins, 
-                                      ddnXSinstance, stoppingModel.dEdx, beamTiming,
+                                      ddnXSinstance, stoppingApprox, beamTiming,
                                       nSamples, getPDF=True) for 
                                       sfGuess, bgGuess, standoff, tofrange, tofbins in 
                                       zip(scaleFactor_guesses, bgLevel_guesses, standoffs, tof_range,
@@ -661,7 +783,7 @@ if not useMPI:
             
             plot.draw()
             
-            plot.show()
+            #plot.show()
 
             fig, ax = plot.subplots(figsize=(8.5,5.25))
             tofbins = []
@@ -676,7 +798,7 @@ if not useMPI:
             ax.set_xlabel('TOF (ns)')
 
             plot.draw()
-            plot.show()
+            #plot.show()
 
         if debugging:
             nll = lambda *args: -compoundLnlike(*args)
@@ -764,7 +886,7 @@ if not useMPI or processPool.is_master():
 
 sampler.reset()
 
-if debugging:
+if debugging and mcIterations != 100:
     mcIterations = 10
 for i,samplerResult in enumerate(sampler.sample(burninPos, lnprob0=burninProb, rstate0=burninRstate, iterations=mcIterations)):
     #if (i+1)%2 == 0:

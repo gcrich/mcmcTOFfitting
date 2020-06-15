@@ -66,6 +66,7 @@ argParser.add_argument('-nDrawsPerEval', default=200000, type=int) # number of d
 argParser.add_argument('-nBurninSteps', default=400, type=int)
 argParser.add_argument('-nMainSteps', default=100, type=int)
 argParser.add_argument('-outputPrefix', type=str, default='')
+argParser.add_argument('-nWalkers', type=int, default=256)
 argParser.add_argument('-qnd', type=int, default=0, choices=[0,1], help='Quick and dirty (0,1): reduce binning behind the scenes')
 
 parsedArgs = argParser.parse_args()
@@ -214,7 +215,7 @@ if quickAndDirty == True:
     nDrawsPerEval = nSamples
 
 # parameters for making the fake data...
-nEvPerLoop = 1000
+nEvPerLoop = 10000
 data_x = np.repeat(x_binCenters,nEvPerLoop)
 
 #
@@ -824,9 +825,11 @@ else:
     burninChainFilename = outputPrefix + '_burninchain.dat'
     mainChainFilename = outputPrefix + '_mainchain.dat'
 
-nDim, nWalkers = len(paramGuesses), 256
+nDim, nWalkers = len(paramGuesses), parsedArgs.nWalkers
 if debugging:
     nWalkers = 2 * nDim
+    if parsedArgs.nWalkers != 256:
+        nWalkers = parsedArgs.nWalkers
 
 p0agitators = [10, 50, 20, 0.05]
 for guess in paramGuesses[4:]:
@@ -846,6 +849,9 @@ fout.close()
 
 if debugging:
     burninSteps = 10
+    if parsedArgs.nBurninSteps != 400:
+        burninSteps = parsedArgs.nBurninSteps
+
 print('\n\n\nRUNNING BURN IN WITH {0} STEPS\n\n\n'.format(burninSteps))
 
 for i,samplerOut in enumerate(sampler.sample(p0, iterations=burninSteps)):
@@ -864,13 +870,19 @@ if doPlotting:
     # save an image of the burn in sampling
     if not e0_only:
         plot.figure()
-        plot.subplot(211)
+        plot.subplot(411)
         plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
         plot.ylabel(r'$E_0$ (keV)')
-        plot.subplot(212)
+        plot.subplot(412)
         plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
-        plot.ylabel(r'$\sigma_0$ (keV)')
-        plot.xlabel('Step')
+        plot.ylabel(r'loc (keV)')
+        plot.subplot(413)
+        plot.plot(sampler.chain[:,:,2].T,'-',color='k',alpha=0.2)
+        plot.ylabel(r'scale')
+        plot.subplot(414)
+        plot.plot(sampler.chain[:,:,3].T,'-', color='k', alpha=0.2)
+        plot.ylabel(r's')
+        plot.xlabel('Burn-in step')
     else:
         plot.figure()
         plot.plot( sampler.chain[:,:,0].T, '-', color='k', alpha=0.2)
@@ -942,15 +954,18 @@ else:
 if doPlotting:
     if not e0_only:
         plot.figure()
-        plot.subplot(311)
+        plot.subplot(411)
         plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
         plot.ylabel(r'$E_0$ (keV)')
-        plot.subplot(312)
+        plot.subplot(412)
         plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
-        plot.ylabel(r'$\sigma_0$ (keV)')
-        plot.subplot(313)
+        plot.ylabel(r'loc (keV)')
+        plot.subplot(413)
         plot.plot(sampler.chain[:,:,2].T,'-',color='k',alpha=0.2)
-        plot.ylabel(r'skew')
+        plot.ylabel(r'scale')
+        plot.subplot(414)
+        plot.plot(sampler.chain[:,:,3].T,'-', color='k', alpha=0.2)
+        plot.ylabel(r's')
         plot.xlabel('Step')
     else:
         plot.figure()

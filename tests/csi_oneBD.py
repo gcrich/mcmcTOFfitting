@@ -723,7 +723,7 @@ paramGuesses = [beamE_guess, eLoss_guess, scale_guess, s_guess]
 #badGuesses = [e0_bad, sigma0_bad, skew_bad]
 scaleFactor_guesses = []
 for i in range(nRuns):
-    scaleFactor_guesses.append(3 * np.sum(observedTOF[i]))
+    scaleFactor_guesses.append(5 * np.sum(observedTOF[i]))
     paramGuesses.append(np.sum(observedTOF[i]))
     #badGuesses.append(np.sum(observedTOF[i]))
 

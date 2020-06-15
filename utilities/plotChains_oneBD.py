@@ -19,7 +19,7 @@ import csv as csvlib
 import argparse
 from numbers import Number
 #import readChainFromFile
-from utilities.utilities import readChainFromFile
+from utilities import readChainFromFile
 argParser = argparse.ArgumentParser()
 argParser.add_argument('-file')
 parsedArgs = argParser.parse_args()
@@ -122,9 +122,22 @@ for ax, chainSamples, label in zip(axes,
 #plt.plot(steps, chain[:,:,3],color='k', alpha=0.2)
 #plt.ylabel('$f_3$')
 axes[3].set_xlabel('Step')
-axes[3].set_xlim(0,300)
+axes[3].set_xlim(0,nSteps)
 plt.draw()
 plt.savefig('oneBD_energyParameter_chain.pdf')
+
+# for idx,chainSamples in enumerate(chain[:,:,4:]):
+#     fig, ax = plt.subplots(figsize=(7,4))
+#     print('shape steps {} shape chainSamples {} shape chainSamples[:,:] {}\n'.format(steps.shape, chainSamples.shape, chainSamples[:,:].shape))
+#     ax.plot(steps, chainSamples[:,:], alpha=0.2, color='k')
+#     ax.set_xlim(0,nSteps)
+#     ax.set_xlabel('Step')
+#     ax.set_ylabel('Par {}'.format(idx))
+#     plt.draw()
+chainSample = chain[:,:,5]
+fig, ax = plt.subplots(figsize=(7,4))
+ax.plot(steps, chainSample, alpha=0.2, color='k')
+plt.draw()
 
 plt.figure()
 plt.plot(steps, probs[:,:], color='k', alpha=0.2)

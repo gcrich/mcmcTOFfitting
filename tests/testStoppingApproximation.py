@@ -101,8 +101,7 @@ dedxfxn = stoppingModel.dEdx
     
 eN_binCenters = getDDneutronEnergy( eD_binCenters )
 
-dataHist = np.zeros((x_bins, eD_bins))
-unweightedDataHist = np.zeros((x_bins, eD_bins))
+
 
 dedxForODE = lambda x, y: dedxfxn(energy=y,x=x)
 
@@ -144,7 +143,15 @@ fig.tight_layout()
 plt.draw()
 plt.show()
 
+dataHist = np.zeros((x_bins, eD_bins))
+unweightedDataHist = np.zeros((x_bins, eD_bins))
+
+dataHist_spline = np.zeros((x_bins, eD_bins))
+unweightedDataHist_spline = np.zeros((x_bins, eD_bins))
+
 nLoops = int(np.ceil(nSamples / nEvPerLoop))
+nLoops = 1
+
 for loopNum in range(0, nLoops):
     #eZeros = np.random.normal( params[0], params[0]*params[1], nEvPerLoop )
     #eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=nEvPerLoop)
@@ -180,3 +187,22 @@ for loopNum in range(0, nLoops):
         
         noWeightHist, edEdges = np.histogram( sol, bins=eD_bins, range=(eD_minRange, eD_maxRange))
         unweightedDataHist[idx,:] += noWeightHist
+
+    solutions = np.zeros((1,x_bins))
+    for eZero in eZeros:
+        sol = interp_spline(eZero, x_binCenters)
+        solutions = np.vstack((solutions, sol))
+    print('shape of solutions {}'.format(solutions.shape))
+    solutions = solutions[1:,:]
+    eSolList = []
+    eSolArray = np.zeros(eD_bins)
+    #for xStepSol in solutions[:,]:
+    #    data_weights = ddnXSfxn.evaluate(xStepSol)
+    #    hist, edEdges = np.histogram(xStepSol, bins=eD_bins, range=(eD_minRange, eD_maxRange), weights=data_weights)
+    #    eSolList.append(hist)
+    for xStepSol in solutions.T:
+        data_weights = ddnXSfxn.evaluate(xStepSol)
+        hist, edEdges = np.histogram(xStepSol, bins=eD_bins, range=(eD_minRange, eD_maxRange), weights=data_weights)
+        eSolList.append(hist)
+        eSolArray = np.vstack((eSolArray,hist))
+    eSolArray = eSolArray[1:,:]

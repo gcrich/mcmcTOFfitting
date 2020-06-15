@@ -42,9 +42,16 @@ class ionStopping:
                 Z, A, rho, charge, excitation = params
                 # go ahead and calculate number density of the stopping medium
                 # it won't change and will be used for every dEdx calc
-                eNumDensity = (sciConsts.Avogadro * self.protonNumber *
-                              self.density /
-                              (self.massNumber*physics.molarMassConstant))
+                
+                # this was originally here
+                # the "self" references don't.. seem right 
+                # left here in case i'm missing something
+                #eNumDensity = (sciConsts.Avogadro * self.protonNumber *
+                #              self.density /
+                #              (self.massNumber*physics.molarMassConstant))
+                eNumDensity = (sciConsts.Avogadro * Z *
+                              rho /
+                              (A * physics.molarMassConstant))
             
                 self.materials.append([Z, A, rho, eNumDensity, excitation])
             

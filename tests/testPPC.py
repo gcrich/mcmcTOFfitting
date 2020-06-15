@@ -10,6 +10,7 @@ from utilities.utilities import (beamTimingShape, ddnXSinterpolator,
 from utilities.ionStopping import ionStopping
 from utilities.ppcTools import ppcTools
 from scipy.stats import (skewnorm, lognorm)
+from matplotlib import rcParams
 import argparse
 
 
@@ -19,8 +20,8 @@ flattenList = lambda l: [item for sublist in l for item in sublist]
 
 
 argParser = argparse.ArgumentParser()
-argParser.add_argument('-file')
-argParser.add_argument('-tofDataFile')
+argParser.add_argument('-file', default='/Users/grayson/Documents/mcscratch/burninchain.dat')
+argParser.add_argument('-tofDataFile', default='/Users/grayson/Documents/quenchingFactors/2016-Jan/coda/multistandoff.dat')
 argParser.add_argument('-nParamSamples', default=50, type=int)
 argParser.add_argument('-nBinsE', default=100, type=int)
 argParser.add_argument('-nBinsX', default=20, type=int)
@@ -35,6 +36,10 @@ numRuns = parsedArgs.nRuns
 
 ppcTool = ppcTools(chainFilename, nSamplesFromTOF=5000,
                    nBins_eD = nBinsE, nBins_x = nBinsX, nRuns = numRuns)
+ppcTool.paramNames = [r'$E_{beam}$ (keV)', r'$\theta$ (keV)', r'$m$ (keV)', 
+                      r'$\sigma$ (1 / keV)', r'$N_1$ (counts)', 
+                      r'$N_2$ (counts)', r'$N_3$ (counts)', r'$N_4$ (counts)',
+                      r'$N_5$ (counts)']
 #ppc, ppcNeutronSpectra = ppcTool.generatePPC( nChainEntries = nParamSamples )
 returnVal = ppcTool.generatePPC( nChainEntries = nParamSamples )
 ppc = returnVal[0]
@@ -102,9 +107,10 @@ for i in range(numRuns):
 runColors = ["#ff678f", "#004edc", "#e16400", "#1fceff", "#781616", "#149c00"] 
 runNames=['Middle','Close', 'Close (detuned)', 'Far', 'Production']         
 tofXvals = [np.linspace(minT, maxT, bins) for minT, maxT, bins in zip(ppcTool.tof_minRange, ppcTool.tof_maxRange, ppcTool.tofRunBins)]
-fig, axes = plt.subplots(numRuns)
+fig, axes = plt.subplots(numRuns, figsize =(8.5,10.51))
 plotIndexOrder = [1,2,0,3,4]
-ylims=[30e3,40e3,15e3,40e3]
+ylims=[30e3,12e3,22e3,35e3]
+xlims=[(130,175),(130,175),(175,225),(190,260)]
 for idx in range(numRuns):
     index = plotIndexOrder[idx]
     ax=axes[idx]
@@ -122,13 +128,15 @@ for idx in range(numRuns):
      #       statsAllData[plotIndexOrder[idx]][2,:], color='red', alpha=0.4)
     ax.set_ylabel('Counts')
     ax.legend(loc='upper right')
+    ax.set_ylim(0., ylims[idx])
+    ax.set_xlim(xlims[idx])
     #ax.set_ylim(0, ylims[idx])
     #ax.set_xbound(ppcTool.tof_minRange[plotIndexOrder[idx]], 
      #           ppcTool.tof_minRange[plotIndexOrder[idx]])
 #plt.tight_layout()
 plt.xlabel('Time of flight (ns)')
 plt.draw()
-plt.savefig('PPC_on_data.png', dpi=400)
+plt.savefig('PPC_on_data.pdf')
 
 
 
@@ -144,7 +152,7 @@ dZeroStats= np.percentile(dZeroSamplesNormed, [16,50,84], axis=0)
 dColors = ['#a6611a','#dfc27d']
 nColors = ['#018571','#80cdc1']
 eN_xVals = ppcTool.eN_binCenters
-fig, axNeutrons = plt.subplots()
+fig, axNeutrons = plt.subplots(figsize=(8.5,5.253))
 
 nBand= axNeutrons.fill_between(eN_xVals, neutronStats[0,:], neutronStats[2,:],
                         facecolor=nColors[0], linewidth=0, alpha=0.4,
@@ -152,7 +160,7 @@ nBand= axNeutrons.fill_between(eN_xVals, neutronStats[0,:], neutronStats[2,:],
 axNeutrons.plot(eN_xVals, neutronStats[1,:], color=nColors[0] )
 axNeutrons.tick_params('x', colors=nColors[0])
 axNeutrons.set_xlabel('Neutron energy (keV)', color=nColors[0])
-axNeutrons.set_ylabel('Intensity')
+axNeutrons.set_ylabel('Intensity (a.u.)')
 
 axDeuterons = axNeutrons.twiny()#.twinx()
 
@@ -177,10 +185,10 @@ axDeuterons.plot(ppcTool.eD_binCenters, dZeroStats[1,:], color=dColors[1])
 #axDeuterons.set_ylabel('Counts (a.u.)')
 features = [dZBand, dBand, nBand]
 labels = [feat.get_label() for feat in features]
-axNeutrons.legend(features, labels, loc=0)
+axNeutrons.legend(features, labels, loc=0,
+                  labelspacing=0.75)
 plt.draw()
-plt.savefig('PPC_neutronSpec.png', dpi=400)
-
+plt.savefig('PPC_neutronSpec.pdf')
 
 
 
@@ -188,5 +196,11 @@ plt.savefig('PPC_neutronSpec.png', dpi=400)
 
 ppcTool.makeCornerPlot(plotFilename = 'corner_allParams.png')
 ppcTool.makeCornerPlot(paramIndexHigh = 4, plotFilename = 'corner_eParams.png')
+
+#rcParams.update({'figure.autolayout':False})
+#ppcTool.makeCornerPlot(plotFilename = 'corner_allParams.png')
+#cornerFig, cornerAxes = plt.subplots(4,4, figsize=(8,8), )
+#ppcTool.makeCornerPlot(paramIndexHigh = 4, nStepsToInclude=150, plotFilename = 'corner_eParams.pdf')
+
 
 plt.show()

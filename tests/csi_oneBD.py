@@ -714,10 +714,10 @@ for i in range(nRuns):
     observedTOFbinEdges.append(tofData[:,0][(binEdges>=tof_minRange[i])&(binEdges<tof_maxRange[i])])
 
 
-beamE_guess = 1860.0 # initial deuteron energy, in keV
-eLoss_guess = 850.0 # width of initial deuteron energy spread
-scale_guess = 180.0
-s_guess = 0.6
+beamE_guess = 1950.0 # initial deuteron energy, in keV
+eLoss_guess = 650.0 # width of initial deuteron energy spread
+scale_guess = 150.0
+s_guess = 0.8
 
 paramGuesses = [beamE_guess, eLoss_guess, scale_guess, s_guess]
 #badGuesses = [e0_bad, sigma0_bad, skew_bad]

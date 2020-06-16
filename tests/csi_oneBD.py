@@ -179,11 +179,11 @@ tofRunBins = [tof_nBins['close'],
 
 
 # range of eD expanded for seemingly higher energy oneBD neutron beam
-eD_bins = 50
+eD_bins = 80
 # if quickAndDirty == True:
 #     eD_bins = 20
 eD_minRange = 200.0
-eD_maxRange = 1200.0
+eD_maxRange = 1800.0
 eD_range = (eD_minRange, eD_maxRange)
 eD_binSize = (eD_maxRange - eD_minRange)/eD_bins
 eD_binCenters = np.linspace(eD_minRange + eD_binSize/2,
@@ -252,7 +252,7 @@ stoppingModel = ionStopping.simpleBethe( stoppingModelParams )
     
 eN_binCenters = getDDneutronEnergy( eD_binCenters )
 
-eD_stoppingApprox_binning = (100,1800,50)
+eD_stoppingApprox_binning = (100,2000,190)
 
 stoppingApprox = ionStopping.betheApprox(stoppingModel, eD_stoppingApprox_binning, x_binCenters)
 

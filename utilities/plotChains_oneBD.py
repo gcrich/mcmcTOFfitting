@@ -134,7 +134,7 @@ plt.savefig('oneBD_energyParameter_chain.pdf')
 #     ax.set_xlabel('Step')
 #     ax.set_ylabel('Par {}'.format(idx))
 #     plt.draw()
-chainSample = chain[:,:,5]
+chainSample = chain[:,:,-1]
 fig, ax = plt.subplots(figsize=(7,4))
 ax.plot(steps, chainSample, alpha=0.2, color='k')
 plt.draw()

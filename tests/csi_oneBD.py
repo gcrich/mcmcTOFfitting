@@ -179,11 +179,11 @@ tofRunBins = [tof_nBins['close'],
 
 
 # range of eD expanded for seemingly higher energy oneBD neutron beam
-eD_bins = 80
+eD_bins = 90
 # if quickAndDirty == True:
 #     eD_bins = 20
 eD_minRange = 200.0
-eD_maxRange = 1800.0
+eD_maxRange = 2000.0
 eD_range = (eD_minRange, eD_maxRange)
 eD_binSize = (eD_maxRange - eD_minRange)/eD_bins
 eD_binCenters = np.linspace(eD_minRange + eD_binSize/2,
@@ -241,10 +241,16 @@ stoppingMedia_Z = 1
 stoppingMedia_A = 2
 stoppingMedia_rho = 8.565e-5 # from red notebook, p 157
 incidentIon_charge = 1
-# IMPORTANT
-# CHECK TO SEE IF THIS FACTOR OF 1e-3 IS NEEDED
-stoppingMedia_meanExcitation = 19.2 * 1e-3 # FACTOR OF 1e-3 NEEDED?
-# IMPORTANT
+
+# NOTE: this value (19.2) is from PDG
+# http://pdg.lbl.gov/2016/AtomicNuclearProperties/HTML/deuterium_gas.html
+# it is in ELECTRONVOLTS
+# alt ref: https://ntrs.nasa.gov/archive/nasa/casi.ntrs.nasa.gov/19840013417.pdf
+# where this value is 18.2 for H_2 gas
+# anyway, the programming in ionStopping assumes keV
+# thus the factor of 1e-3
+stoppingMedia_meanExcitation = 19.2 * 1e-3 # 
+
 stoppingModelParams = [stoppingMedia_Z, stoppingMedia_A, stoppingMedia_rho,
                        incidentIon_charge, stoppingMedia_meanExcitation]
 stoppingModel = ionStopping.simpleBethe( stoppingModelParams )
@@ -252,7 +258,7 @@ stoppingModel = ionStopping.simpleBethe( stoppingModelParams )
     
 eN_binCenters = getDDneutronEnergy( eD_binCenters )
 
-eD_stoppingApprox_binning = (100,2000,190)
+eD_stoppingApprox_binning = (100,2400,100)
 
 stoppingApprox = ionStopping.betheApprox(stoppingModel, eD_stoppingApprox_binning, x_binCenters)
 
@@ -597,10 +603,10 @@ def compoundLnlike(params, observables, standoffDists, tofRanges, tofBinnings,
     
     
 # PARAMETER BOUNDARIES
-min_beamE, max_beamE = 1500.0, 2200.0 # see lab book pg54, date 1/24/16 - 2070 field of 139.091 mT gives expected Ed = 1.8784 MeV
-min_eLoss, max_eLoss = 500.0,1000.0
-min_scale, max_scale = 40.0, 300.0
-min_s, max_s = 0.1, 1.6
+min_beamE, max_beamE = 1500.0, 2400.0 # CONFER WITH TANDEM LOGS
+min_eLoss, max_eLoss = 400.0,1000.0
+min_scale, max_scale = 40.0, 400.0
+min_s, max_s = 0.1, 1.8
 paramRanges = []
 paramRanges.append((min_beamE, max_beamE))
 paramRanges.append((min_eLoss, max_eLoss))
@@ -721,10 +727,10 @@ for i in range(nRuns):
     observedTOFbinEdges.append(tofData[:,0][(binEdges>=tof_minRange[i])&(binEdges<tof_maxRange[i])])
 
 
-beamE_guess = 1950.0 # initial deuteron energy, in keV
+beamE_guess = 2150.0 # initial deuteron energy, in keV
 eLoss_guess = 650.0 # width of initial deuteron energy spread
-scale_guess = 150.0
-s_guess = 0.8
+scale_guess = 250.0
+s_guess = 1.4
 
 paramGuesses = [beamE_guess, eLoss_guess, scale_guess, s_guess]
 #badGuesses = [e0_bad, sigma0_bad, skew_bad]
@@ -820,6 +826,7 @@ if not useMPI:
 
 
 if quitEarly:
+    plot.show()
     quit()
 
 #

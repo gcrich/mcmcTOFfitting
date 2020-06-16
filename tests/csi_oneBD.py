@@ -365,6 +365,10 @@ def generateModelData_ode(params, standoffDistance, range_tof, nBins_tof, ddnXSf
     return scaleFactor * beamTimer.applySpreading(tofData) + np.random.poisson(bgLevel, nBins_tof)
 
 
+# TODO: make better implementation of 0deg transit time
+zeroDegSpread_binCenters = np.linspace(0, 24, 7, True)
+zeroDegSpread_vals = np.exp(-zeroDegSpread_binCenters/2) /np.sum(np.exp(-zeroDegSpread_binCenters/2))
+
 def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
                       stoppingApprox, beamTimer, nSamples, getPDF=False):
     """
@@ -378,6 +382,7 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
     beamE, eLoss, scale, s, scaleFactor, bgLevel = params
     e0mean = 900.0
     dataHist = np.zeros((x_bins, eD_bins))
+    
     
     
     nLoops = int(np.ceil(nSamples / nEvPerLoop))
@@ -464,6 +469,8 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
     tofData, tofBinEdges = np.histogram( tofs.flatten(), bins=nBins_tof, range=range_tof,
                                         weights=tofWeights.flatten(), density=getPDF)
                                         
+    # spread with expo modeling transit time across 0 degree
+    tofData = np.convolve(tofData, zeroDegSpread_vals, 'full')[:-len(zeroDegSpread_binCenters)+1]
     # return step applies scaling and adds poisson-distributed background
     return scaleFactor * beamTimer.applySpreading(tofData) + np.random.poisson(bgLevel, nBins_tof)
 

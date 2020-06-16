@@ -233,13 +233,15 @@ ddnXSinstance = ddnXSinterpolator()
 # to incorporate potential binning errors, maybe 4+4 in quadrature? (this is ~5.65)
 # this is perhaps not where binning errors should be accommodated
 # anyway, first arg sets timing spread sigma
-beamTiming = beamTimingShape.gaussianTiming(4, 4)
+beamTiming = beamTimingShape.gaussianTiming(5.65, 4)
 zeroDegTimeSpreader = zeroDegreeTimingSpread()
 
 # stopping power model and parameters
 stoppingMedia_Z = 1
 stoppingMedia_A = 2
-stoppingMedia_rho = 8.565e-5 # from red notebook, p 157
+#stoppingMedia_rho = 8.565e-5 # from red notebook, p 157
+stoppingMedia_rho = 4*8.565e-5 # assume density scales like pressure!
+# earlier runs were at 0.5 atm, this run was at 2 atm
 incidentIon_charge = 1
 
 # NOTE: this value (19.2) is from PDG
@@ -386,7 +388,7 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
     bgLevel parameter treats flat background - it is the lambda parameter of a poisson that is sampled from in each TOF bin
     """
     beamE, eLoss, scale, s, scaleFactor, bgLevel = params
-    e0mean = 1200.0
+    e0mean = 1500.0
     dataHist = np.zeros((x_bins, eD_bins))
     
     
@@ -607,7 +609,7 @@ def compoundLnlike(params, observables, standoffDists, tofRanges, tofBinnings,
     
 # PARAMETER BOUNDARIES
 min_beamE, max_beamE = 1800.0, 2700.0 # CONFER WITH TANDEM LOGS
-min_eLoss, max_eLoss = 400.0,1400.0
+min_eLoss, max_eLoss = 200.0,1400.0
 min_scale, max_scale = 10.0, 700.0
 min_s, max_s = 0.05, 3.0
 paramRanges = []
@@ -731,7 +733,7 @@ for i in range(nRuns):
 
 
 beamE_guess = 2400.0 # initial deuteron energy, in keV, guess based on TV of tandem
-eLoss_guess = 1000.0 # width of initial deuteron energy spread
+eLoss_guess = 600.0 # central location of energy lost (keV) in havar foil, based on SRIM ish
 scale_guess = 250.0
 s_guess = 1.0
 

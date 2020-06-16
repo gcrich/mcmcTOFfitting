@@ -603,7 +603,7 @@ def compoundLnlike(params, observables, standoffDists, tofRanges, tofBinnings,
     
     
 # PARAMETER BOUNDARIES
-min_beamE, max_beamE = 1500.0, 2400.0 # CONFER WITH TANDEM LOGS
+min_beamE, max_beamE = 1800.0, 2600.0 # CONFER WITH TANDEM LOGS
 min_eLoss, max_eLoss = 400.0,1200.0
 min_scale, max_scale = 40.0, 500.0
 min_s, max_s = 0.05, 2.0
@@ -727,7 +727,7 @@ for i in range(nRuns):
     observedTOFbinEdges.append(tofData[:,0][(binEdges>=tof_minRange[i])&(binEdges<tof_maxRange[i])])
 
 
-beamE_guess = 2000.0 # initial deuteron energy, in keV
+beamE_guess = 2450.0 # initial deuteron energy, in keV, guess based on TV of tandem
 eLoss_guess = 750.0 # width of initial deuteron energy spread
 scale_guess = 180.0
 s_guess = 1.0

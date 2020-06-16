@@ -179,11 +179,11 @@ tofRunBins = [tof_nBins['close'],
 
 
 # range of eD expanded for seemingly higher energy oneBD neutron beam
-eD_bins = 90
+eD_bins = 100
 # if quickAndDirty == True:
 #     eD_bins = 20
 eD_minRange = 200.0
-eD_maxRange = 2000.0
+eD_maxRange = 2200.0
 eD_range = (eD_minRange, eD_maxRange)
 eD_binSize = (eD_maxRange - eD_minRange)/eD_bins
 eD_binCenters = np.linspace(eD_minRange + eD_binSize/2,

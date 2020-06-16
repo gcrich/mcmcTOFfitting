@@ -211,7 +211,7 @@ x_binCenters = np.linspace(x_minRange + x_binSize/2,
 
 nSamples = 200000
 if quickAndDirty == True:
-    nSamples = 50000
+    nSamples = 60000
     nDrawsPerEval = nSamples
 
 # parameters for making the fake data...
@@ -386,7 +386,7 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
     bgLevel parameter treats flat background - it is the lambda parameter of a poisson that is sampled from in each TOF bin
     """
     beamE, eLoss, scale, s, scaleFactor, bgLevel = params
-    e0mean = 900.0
+    e0mean = 1200.0
     dataHist = np.zeros((x_bins, eD_bins))
     
     
@@ -569,16 +569,19 @@ def lnlike(params, observables, standoffDist, range_tof, nBins_tof,
                                     beamTiming, nDraws, True)
     binLikelihoods = []
     for binNum in range(len(observables)):
-        if observables[binNum] == 0:
-            observables[binNum] = 1
-        if evalData[binNum] == 0:
-            evalData[binNum] = 1
-# these nexxt two lines are a poor/old man's poisson.logpmf()
-# note that np.log(poisson.pmf()) is NOT THE SAME!
-        poiLogpmf = -observables[binNum] - special.gammaln(int(evalData[binNum])+1)
-        if evalData[binNum] > 0:
-            poiLogpmf += evalData[binNum]*np.log(observables[binNum])
-        binLikelihoods.append(observables[binNum] * poiLogpmf)
+        if isnan(evalData[binNum]):
+            binLikelihoods.append(-np.inf)
+        else:
+            if observables[binNum] == 0:
+                observables[binNum] = 1
+            if evalData[binNum] == 0:
+                evalData[binNum] = 1
+    # these nexxt two lines are a poor/old man's poisson.logpmf()
+    # note that np.log(poisson.pmf()) is NOT THE SAME!
+            poiLogpmf = -observables[binNum] - special.gammaln(int(evalData[binNum])+1)
+            if evalData[binNum] > 0:
+                poiLogpmf += evalData[binNum]*np.log(observables[binNum])
+            binLikelihoods.append(observables[binNum] * poiLogpmf)
 #        binLikelihoods.append(norm.logpdf(evalData[binNum], 
 #                                          observables[binNum], 
 #                                            observables[binNum] * 0.10))
@@ -603,10 +606,10 @@ def compoundLnlike(params, observables, standoffDists, tofRanges, tofBinnings,
     
     
 # PARAMETER BOUNDARIES
-min_beamE, max_beamE = 1800.0, 2600.0 # CONFER WITH TANDEM LOGS
-min_eLoss, max_eLoss = 400.0,1200.0
-min_scale, max_scale = 40.0, 500.0
-min_s, max_s = 0.05, 2.0
+min_beamE, max_beamE = 1800.0, 2700.0 # CONFER WITH TANDEM LOGS
+min_eLoss, max_eLoss = 400.0,1400.0
+min_scale, max_scale = 10.0, 700.0
+min_s, max_s = 0.05, 3.0
 paramRanges = []
 paramRanges.append((min_beamE, max_beamE))
 paramRanges.append((min_eLoss, max_eLoss))
@@ -727,9 +730,9 @@ for i in range(nRuns):
     observedTOFbinEdges.append(tofData[:,0][(binEdges>=tof_minRange[i])&(binEdges<tof_maxRange[i])])
 
 
-beamE_guess = 2450.0 # initial deuteron energy, in keV, guess based on TV of tandem
-eLoss_guess = 750.0 # width of initial deuteron energy spread
-scale_guess = 180.0
+beamE_guess = 2400.0 # initial deuteron energy, in keV, guess based on TV of tandem
+eLoss_guess = 1000.0 # width of initial deuteron energy spread
+scale_guess = 250.0
 s_guess = 1.0
 
 paramGuesses = [beamE_guess, eLoss_guess, scale_guess, s_guess]

@@ -111,10 +111,10 @@ class ionStopping:
             dedxfxn = self.betheModel.dEdx
             dedxForODE = lambda x, y: dedxfxn(energy=y,x=x)
 
-            # eDstep, eD_minRange, eD_maxRange = eD_binInfo
-            eDstep = 50
-            eD_minRange = 400.
-            eD_maxRange = 1200.
+            eDstep, eD_minRange, eD_maxRange = eD_binInfo
+            #eDstep = 50
+            #eD_minRange = 400.
+            #eD_maxRange = 1200.
             self.edgrid = np.arange(eD_minRange, eD_maxRange, eDstep)
 
             z = np.zeros(len(self.x_binCenters))

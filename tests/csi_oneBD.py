@@ -233,7 +233,7 @@ ddnXSinstance = ddnXSinterpolator()
 # to incorporate potential binning errors, maybe 4+4 in quadrature? (this is ~5.65)
 # this is perhaps not where binning errors should be accommodated
 # anyway, first arg sets timing spread sigma
-beamTiming = beamTimingShape.gaussianTiming(4, 4)
+beamTiming = beamTimingShape.gaussianTiming(2, 4)
 zeroDegTimeSpreader = zeroDegreeTimingSpread()
 
 # stopping power model and parameters

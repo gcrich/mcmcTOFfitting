@@ -597,10 +597,10 @@ def compoundLnlike(params, observables, standoffDists, tofRanges, tofBinnings,
     
     
 # PARAMETER BOUNDARIES
-min_beamE, max_beamE = 1500.0, 2000.0 # see lab book pg54, date 1/24/16 - 2070 field of 139.091 mT gives expected Ed = 1.8784 MeV
-min_eLoss, max_eLoss = 600.0,1000.0
+min_beamE, max_beamE = 1500.0, 2200.0 # see lab book pg54, date 1/24/16 - 2070 field of 139.091 mT gives expected Ed = 1.8784 MeV
+min_eLoss, max_eLoss = 500.0,1000.0
 min_scale, max_scale = 40.0, 300.0
-min_s, max_s = 0.1, 1.2
+min_s, max_s = 0.1, 1.6
 paramRanges = []
 paramRanges.append((min_beamE, max_beamE))
 paramRanges.append((min_eLoss, max_eLoss))

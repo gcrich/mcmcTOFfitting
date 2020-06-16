@@ -110,7 +110,9 @@ class tofWindows(object):
         """
         TOF windows specific to CsI[Na] "one BD" experiment
         """
-        minRange = {'close': 100, 'mid': 120, 'far': 128}
+        #minRange = {'close': 100, 'mid': 120, 'far': 128}
+        #maxRange = {'close': 180, 'mid': 200, 'far': 220}
+        minRange = {'close': 80, 'mid': 100, 'far': 120}
         maxRange = {'close': 180, 'mid': 200, 'far': 220}
         # really, bins should be determined based on range.. i think
         # at least for this experiment, there's pretty coarse binning

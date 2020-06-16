@@ -59,7 +59,7 @@ argParser.add_argument('-inputDataFilename', default=defaultInputDataFilename, t
 argParser.add_argument('-mpi', default=0,type=int)
 argParser.add_argument('-debug', choices=[0,1], default=0,type=int)
 argParser.add_argument('-nThreads', default=5, type=int)
-argParser.add_argument('-quitEarly', choices=[0,1], default=0, type=int)
+argParser.add_argument('-quitEarly', choices=[0,1], default=1, type=int)
 argParser.add_argument('-batch',choices=[0,1], default=0, type=int)
 argParser.add_argument('-forceCustomPDF', choices=[0,1], default=0, type=int)
 argParser.add_argument('-nDrawsPerEval', default=200000, type=int) # number of draws from distribution used in each evaluation of the likelihood function
@@ -731,8 +731,12 @@ for i in range(nRuns):
     observedTOF.append(tofData[:,i+1][(binEdges >= tof_minRange[i]) & (binEdges < tof_maxRange[i])])
     observedTOFbinEdges.append(tofData[:,0][(binEdges>=tof_minRange[i])&(binEdges<tof_maxRange[i])])
 
+    print('run {}\n'.format(i))
+    print(observedTOFbinEdges)
+    print(observedTOF)
 
-beamE_guess = 2400.0 # initial deuteron energy, in keV, guess based on TV of tandem
+
+beamE_guess = 2225.0 # initial deuteron energy, in keV, guess based on TV of tandem
 eLoss_guess = 600.0 # central location of energy lost (keV) in havar foil, based on SRIM ish
 scale_guess = 250.0
 s_guess = 1.0
@@ -832,6 +836,8 @@ if not useMPI:
 
 if quitEarly:
     plot.show()
+    burninSteps = 1
+    
     quit()
 
 #
@@ -870,6 +876,8 @@ if debugging:
     burninSteps = 10
     if parsedArgs.nBurninSteps != 400:
         burninSteps = parsedArgs.nBurninSteps
+    if quitEarly == True:
+        burninSteps=1
 
 print('\n\n\nRUNNING BURN IN WITH {0} STEPS\n\n\n'.format(burninSteps))
 
@@ -922,6 +930,9 @@ if debugging:
         mcIterations = 10
     else:
         mcIterations = parsedArgs.nMainSteps
+    if quitEarly == True:
+        mcIterations = 1
+        
 for i,samplerResult in enumerate(sampler.sample(burninPos, lnprob0=burninProb, rstate0=burninRstate, iterations=mcIterations)):
     #if (i+1)%2 == 0:
     #    print("{0:5.1%}".format(float(i)/mcIterations))

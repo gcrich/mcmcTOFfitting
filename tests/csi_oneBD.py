@@ -151,6 +151,8 @@ standoffs = [distances.tunlSSA_CsI_oneBD.standoffClose,
             distances.tunlSSA_CsI_oneBD.standoffFar]
 standoffName = {0: 'close', 1:'mid', 2:'far'}
 
+
+
 tofWindowSettings = tofWindows.csi_oneBD()
 ##############
 # vars for binning of TOF 
@@ -202,6 +204,11 @@ x_binCenters = np.linspace(x_minRange + x_binSize/2,
                            x_maxRange - x_binSize/2,
                            x_bins)
 
+# these will get used frequently, so just make them once
+neutronFlightPaths = [distances.tunlSSA_CsI_oneBD.cellLength + standoff - x_binCenters for standoff in standoffs]
+deuteronFlightPaths = []
+
+
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #
 # SETUP OF SOME SAMPLING PARAMETERS
@@ -233,14 +240,14 @@ ddnXSinstance = ddnXSinterpolator()
 # to incorporate potential binning errors, maybe 4+4 in quadrature? (this is ~5.65)
 # this is perhaps not where binning errors should be accommodated
 # anyway, first arg sets timing spread sigma
-beamTiming = beamTimingShape.gaussianTiming(5.65, 4)
+beamTiming = beamTimingShape.gaussianTiming(4, 4)
 zeroDegTimeSpreader = zeroDegreeTimingSpread()
 
 # stopping power model and parameters
 stoppingMedia_Z = 1
 stoppingMedia_A = 2
 #stoppingMedia_rho = 8.565e-5 # from red notebook, p 157
-stoppingMedia_rho = 8.565e-5 # assume density scales like pressure!
+stoppingMedia_rho = 4*8.565e-5 # assume density scales like pressure!
 # earlier runs were at 0.5 atm, this run was at 2 atm
 incidentIon_charge = 1
 
@@ -377,6 +384,9 @@ def generateModelData_ode(params, standoffDistance, range_tof, nBins_tof, ddnXSf
 zeroDegSpread_binCenters = np.linspace(0, 24, 7, True)
 zeroDegSpread_vals = np.exp(-zeroDegSpread_binCenters/2) /np.sum(np.exp(-zeroDegSpread_binCenters/2))
 
+# introduce a ~10% attentuation of beam intensity across cell
+#attenuationWeights = np.exp(- x_binCenters/20)
+
 dataHist = np.zeros((x_bins, eD_bins))
 
 def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
@@ -458,6 +468,7 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
     tofs = np.zeros((x_bins,eD_bins))
     tofWeights = np.zeros((x_bins,eD_bins))
     #print('shape of drawHist2d {}\n'.format(drawHist2d.shape))
+    # TODO: make this more pythonic and efficient?
     for index, weight in np.ndenumerate( drawHist2d ):
         cellLocation = x_binCenters[index[0]]
         effectiveDenergy = (e0mean + eD_binCenters[index[1]])/2
@@ -682,9 +693,9 @@ for i in range(nRuns):
 
 
 beamE_guess = 2450.0 # initial deuteron energy, in keV, guess based on TV of tandem
-eLoss_guess = 1400.0 # central location of energy lost (keV) in havar foil, based on SRIM ish
+eLoss_guess = 1200.0 # central location of energy lost (keV) in havar foil, based on SRIM ish
 scale_guess = 50.0
-s_guess = 0.6
+s_guess = 0.1
 
 paramGuesses = [beamE_guess, eLoss_guess, scale_guess, s_guess]
 #badGuesses = [e0_bad, sigma0_bad, skew_bad]
@@ -735,19 +746,17 @@ if not useMPI:
             for idx in range(len(tof_minRange)):
                 tofbins.append(np.linspace(tof_minRange[idx], tof_maxRange[idx], tofRunBins[idx]))
             plot.figure()
-            plot.subplot(211)
-            for i in range(len(tof_minRange)):
-                plot.scatter(tofbins[i], observedTOF[i], color=runColors[i])
-            plot.xlim(min(tof_minRange), max(tof_maxRange))
-            plot.ylabel('Experimental observed counts')
-            plot.title('Observed data and fake data for two parameter sets')
-            plot.subplot(212)
-            for i in range(len(tof_minRange)):
-                plot.scatter(tofbins[i], fakeData[i], color=runColors[i], marker='d')
-                #plot.scatter(tofbins[i], fakeDataOff[i], color=runColors[i], marker='+')
-            plot.ylabel('counts')
+            plot.subplot(311)
+            plot.scatter(tofbins[0], observedTOF[0],color=runColors[0], label='Exp. data')
+            plot.scatter(tofbins[0], fakeData[0], edgecolors=runColors[0], facecolors='none', label='Fake data')
+            plot.subplot(312)
+            plot.scatter(tofbins[1], observedTOF[1],color=runColors[1], label='Exp. data')
+            plot.scatter(tofbins[1], fakeData[1], edgecolors=runColors[1], facecolors='none', label='Fake data')
+            plot.subplot(313)
+            plot.scatter(tofbins[2], observedTOF[2],color=runColors[2], label='Exp. data')
+            plot.scatter(tofbins[2], fakeData[2], edgecolors=runColors[2], facecolors='none', label='Fake data')
             plot.xlabel('TOF (ns)')
-            plot.xlim(min(tof_minRange),max(tof_maxRange))
+            
             
             plot.draw()
             
@@ -759,8 +768,8 @@ if not useMPI:
                 tofbins.append(np.linspace(tof_minRange[idx], tof_maxRange[idx], tofRunBins[idx]))
             ax.set_xlim(min(tof_minRange), max(tof_maxRange))
             for i in range(len(tof_minRange)):
-                plot.scatter(tofbins[i], observedTOF[i],color=runColors[i], label='Exp. data')
-                plot.scatter(tofbins[i], fakeData[i], edgecolors=runColors[i], facecolors='none', label='Fake data')
+                ax.scatter(tofbins[i], observedTOF[i],color=runColors[i], label='Exp. data')
+                ax.scatter(tofbins[i], fakeData[i], edgecolors=runColors[i], facecolors='none', label='Fake data')
             ax.legend( loc='best', frameon=False, ncol=2, numpoints=1)
 
             ax.set_xlabel('TOF (ns)')
@@ -807,7 +816,7 @@ for guess in paramGuesses[4:]:
 
 p0 = [paramGuesses + p0agitators*np.random.randn(nDim) for i in range(nWalkers)]
 
-raise SystemExit
+
 
 # NOTE: i am not copying over the MPI-enabled stuff right now
 sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 

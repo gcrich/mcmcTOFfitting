@@ -240,7 +240,7 @@ zeroDegTimeSpreader = zeroDegreeTimingSpread()
 stoppingMedia_Z = 1
 stoppingMedia_A = 2
 #stoppingMedia_rho = 8.565e-5 # from red notebook, p 157
-stoppingMedia_rho = 4*8.565e-5 # assume density scales like pressure!
+stoppingMedia_rho = 8.565e-5 # assume density scales like pressure!
 # earlier runs were at 0.5 atm, this run was at 2 atm
 incidentIon_charge = 1
 
@@ -377,6 +377,8 @@ def generateModelData_ode(params, standoffDistance, range_tof, nBins_tof, ddnXSf
 zeroDegSpread_binCenters = np.linspace(0, 24, 7, True)
 zeroDegSpread_vals = np.exp(-zeroDegSpread_binCenters/2) /np.sum(np.exp(-zeroDegSpread_binCenters/2))
 
+dataHist = np.zeros((x_bins, eD_bins))
+
 def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
                       stoppingApprox, beamTimer, nSamples, getPDF=False):
     """
@@ -389,13 +391,13 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
     """
     beamE, eLoss, scale, s, scaleFactor, bgLevel = params
     e0mean = 1500.0
-    dataHist = np.zeros((x_bins, eD_bins))
+    
     
     
     
     nLoops = int(np.ceil(nSamples / nEvPerLoop))
     solutions = np.zeros((nEvPerLoop,x_bins))
-    dataHist = np.zeros((x_bins,eD_bins))
+
     for loopNum in range(0, nLoops):
         #eZeros = np.random.normal( params[0], params[0]*params[1], nEvPerLoop )
         #eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=nEvPerLoop)
@@ -484,65 +486,7 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
 
     
 
-def genModelData_lowMem(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
-                      dedxfxn, beamTimer, nSamples, getPDF=False):
-    """
-    Generate model data with cross-section weighting applied
-    
-    this iterates more simply, trying to avoid memory mishaps
-    """
-    beamE, eLoss, scale, s, scaleFactor = params
-    dataHist = np.zeros((x_bins, eD_bins))
-    for sampleNum in range(nSamples):
-#        if sampleNum % 1000 == 0:
-#            print('on sample {0}'.format(sampleNum))
-        #eZeros = np.random.normal( params[0], params[0]*params[1], nEvPerLoop )
-        #eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=nEvPerLoop)
-        eZero = beamE - lognorm.rvs(s=s, loc=eLoss, scale=scale, size=1)[0]
-        checkForBadEs = False
-        if eZero <= 0:
-            checkForBadEs = True
-        while checkForBadEs:
-            eZero = beamE - lognorm.rvs(s=s, loc=eLoss, scale=scale, size=1)[0]
-            if eZero <= 0:
-                checkForBadEs = True
 
-        data_eD_matrix = odeint( dedxfxn, eZero, x_binCenters )
-        data_eD = data_eD_matrix.flatten()
-        data_weights = ddnXSfxn.evaluate(data_eD)
-#        print('length of data_x {} length of data_eD {} length of weights {}'.format(
-#              len(data_x), len(data_eD), len(data_weights)))
-        dataHist2d, xedges, yedges = np.histogram2d( x_binCenters, data_eD,
-                                                [x_bins, eD_bins],
-                                                [[x_minRange,x_maxRange],[eD_minRange,eD_maxRange]],
-                                                weights=data_weights)
-        dataHist += dataHist2d # element-wise, in-place addition
-        
-    e0mean = np.mean(beamE - lognorm.rvs(s=s, loc=eLoss, scale=scale, size=1000))       
-#    print('linalg norm value {}'.format(np.linalg.norm(dataHist)))
-#    dataHist = dataHist / np.linalg.norm(dataHist)
-#    print('sum of data hist {}'.format(np.sum(dataHist*eD_binSize*x_binSize)))
-    dataHist /= np.sum(dataHist*eD_binSize*x_binSize)
-#    plot.matshow(dataHist)
-#    plot.show()
-    drawHist2d = (np.rint(dataHist * nSamples)).astype(int)
-    tofs = []
-    tofWeights = []
-    for index, weight in np.ndenumerate( drawHist2d ):
-        cellLocation = x_binCenters[index[0]]
-        effectiveDenergy = (e0mean + eD_binCenters[index[1]])/2
-        tof_d = getTOF( masses.deuteron, effectiveDenergy, cellLocation )
-        neutronDistance = (distances.tunlSSA_CsI.cellLength - cellLocation +
-                           standoffDistance )
-        tof_n = getTOF(masses.neutron, eN_binCenters[index[1]], neutronDistance)
-        zeroD_times, zeroD_weights = zeroDegTimeSpreader.getTimesAndWeights( eN_binCenters[index[1]] )
-        tofs.append( tof_d + tof_n + zeroD_times )
-        tofWeights.append(weight * zeroD_weights)
-        # TODO: next line needs adjustment if using OLD NUMPY < 1.6.1 
-        # if lower than that, use the 'normed' arg, rather than 'density'
-    tofData, tofBinEdges = np.histogram( tofs, bins=nBins_tof, range=range_tof,
-                                        weights=tofWeights, density=getPDF)
-    return scaleFactor * beamTimer.applySpreading(tofData) 
 
 
 def lnlikeHelp(evalData, observables):
@@ -731,15 +675,16 @@ for i in range(nRuns):
     observedTOF.append(tofData[:,i+1][(binEdges >= tof_minRange[i]) & (binEdges < tof_maxRange[i])])
     observedTOFbinEdges.append(tofData[:,0][(binEdges>=tof_minRange[i])&(binEdges<tof_maxRange[i])])
 
-    print('run {}\n'.format(i))
-    print(observedTOFbinEdges)
-    print(observedTOF)
+    #print('run {}\n'.format(i))
+    #print(observedTOFbinEdges)
+    #print(observedTOF)
+#raise SystemExit
 
 
-beamE_guess = 2225.0 # initial deuteron energy, in keV, guess based on TV of tandem
-eLoss_guess = 600.0 # central location of energy lost (keV) in havar foil, based on SRIM ish
-scale_guess = 250.0
-s_guess = 1.0
+beamE_guess = 2450.0 # initial deuteron energy, in keV, guess based on TV of tandem
+eLoss_guess = 1400.0 # central location of energy lost (keV) in havar foil, based on SRIM ish
+scale_guess = 50.0
+s_guess = 0.6
 
 paramGuesses = [beamE_guess, eLoss_guess, scale_guess, s_guess]
 #badGuesses = [e0_bad, sigma0_bad, skew_bad]
@@ -837,7 +782,7 @@ if not useMPI:
 if quitEarly:
     plot.show()
     burninSteps = 1
-    
+    raise SystemExit
     quit()
 
 #
@@ -861,6 +806,8 @@ for guess in paramGuesses[4:]:
     p0agitators.append(guess * 0.15)
 
 p0 = [paramGuesses + p0agitators*np.random.randn(nDim) for i in range(nWalkers)]
+
+raise SystemExit
 
 # NOTE: i am not copying over the MPI-enabled stuff right now
 sampler = emcee.EnsembleSampler(nWalkers, nDim, lnprob, 

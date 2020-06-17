@@ -68,6 +68,7 @@ argParser.add_argument('-nMainSteps', default=100, type=int)
 argParser.add_argument('-outputPrefix', type=str, default='')
 argParser.add_argument('-nWalkers', type=int, default=256)
 argParser.add_argument('-qnd', type=int, default=0, choices=[0,1], help='Quick and dirty (0,1): reduce binning behind the scenes')
+argParser.add_argument('-shiftTOF', type=int, default=0, help='Shifts the observed data by specified number of TOF bins')
 
 parsedArgs = argParser.parse_args()
 runNumber = parsedArgs.run
@@ -80,6 +81,7 @@ burninSteps = parsedArgs.nBurninSteps
 mcIterations = parsedArgs.nMainSteps
 outputPrefix = parsedArgs.outputPrefix
 quickAndDirty = True if parsedArgs.qnd == 1 else 0
+tofShift = parsedArgs.shiftTOF
 
 # batchMode turns off plotting and extraneous stuff like test NLL eval at beginning 
 batchMode = False
@@ -112,7 +114,8 @@ if useMPI:
 if quickAndDirty == True:
     print('\n\nRUNNING IN QUICK AND DIRTY MODE\n\n')
 
-
+if tofShift != 0:
+    print('\n\nSHIFTING TOF DATA BY {} BINS\n\n'.format(tofShift))
 
 ####################
 # CHECK TO SEE IF WE ARE USING PYTHON VERSION 2.7 OR ABOVE
@@ -674,6 +677,15 @@ def checkLikelihoodEval(observables, evalData):
 # get the data from file
 tofData = readMultiStandoffTOFdata(inputDataFilename, 3)
 
+if tofShift > 0:
+    newTimeBins = tofData[:,0][:-tofShift]
+    tofData = tofData[tofShift:,]
+    tofData[:,0] = newTimeBins
+if tofShift < 0:
+    tofShift = -1*tofShift
+    newTimeBins = tofData[:,0][tofShift:]
+    tofData = tofData[:-tofShift,]
+    tofData[:,0] = newTimeBins
 
 binEdges = tofData[:,0]
 

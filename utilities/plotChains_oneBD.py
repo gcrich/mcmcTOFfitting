@@ -19,7 +19,8 @@ import csv as csvlib
 import argparse
 from numbers import Number
 #import readChainFromFile
-from utilities import readChainFromFile
+from utilities.utilities import readChainFromFile
+from utilities import ppcTools_oneBD
 argParser = argparse.ArgumentParser()
 argParser.add_argument('-file')
 parsedArgs = argParser.parse_args()
@@ -86,7 +87,18 @@ chainFilename = parsedArgs.file
 #
 #nParams = len(chain[0,0])
 #nSteps = int(len(indexList)/(max(indexList)+1))
-chain, probs, nParams, nWalkers, nSteps = readChainFromFile(chainFilename)
+
+thePPCobject = ppcTools_oneBD.ppcTools_oneBD(chainFilename)
+
+#chain, probs, nParams, nWalkers, nSteps = readChainFromFile(chainFilename)
+
+
+chain = thePPCobject.chain
+probs = thePPCobject.probs
+nParams = thePPCobject.nParams
+nWalkers = thePPCobject.nWalkers
+nSteps = thePPCobject.nSteps
+
 steps = np.linspace(1, nSteps, nSteps)
 
 
@@ -160,3 +172,5 @@ plt.scatter(chain[:,:,0], probs[:,:], alpha=0.05)
 plt.draw()
 
 plt.show()
+
+thePPCobject.makeCornerPlot(plotFilename='oneBD_corner.png')

@@ -68,6 +68,7 @@ argParser.add_argument('-nMainSteps', default=100, type=int)
 argParser.add_argument('-outputPrefix', type=str, default='')
 argParser.add_argument('-nWalkers', type=int, default=256)
 argParser.add_argument('-qnd', type=int, default=0, choices=[0,1], help='Quick and dirty (0,1): reduce binning behind the scenes')
+argParser.add_argument('-quickish', type=int, default=0, choices=[0,1])
 argParser.add_argument('-shiftTOF', type=int, default=0, help='Shifts the observed data by specified number of TOF bins')
 
 parsedArgs = argParser.parse_args()
@@ -82,6 +83,7 @@ mcIterations = parsedArgs.nMainSteps
 outputPrefix = parsedArgs.outputPrefix
 quickAndDirty = True if parsedArgs.qnd == 1 else 0
 tofShift = parsedArgs.shiftTOF
+quickish = True if parsedArgs.quickish == 1 else 0
 
 # batchMode turns off plotting and extraneous stuff like test NLL eval at beginning 
 batchMode = False
@@ -113,6 +115,9 @@ if useMPI:
 #
 if quickAndDirty == True:
     print('\n\nRUNNING IN QUICK AND DIRTY MODE\n\n')
+
+if quickish == True:
+    print('\n\nRUNNING KINDA QUICK\n\n')
 
 if tofShift != 0:
     print('\n\nSHIFTING TOF DATA BY {} BINS\n\n'.format(tofShift))
@@ -220,6 +225,11 @@ deuteronFlightPaths = []
 #
 
 nSamples = 200000
+
+if quickish == True:
+    nSamples = 100000
+    nDrawsPerEval = nSamples
+
 if quickAndDirty == True:
     nSamples = 60000
     nDrawsPerEval = nSamples
@@ -243,7 +253,11 @@ ddnXSinstance = ddnXSinterpolator()
 # to incorporate potential binning errors, maybe 4+4 in quadrature? (this is ~5.65)
 # this is perhaps not where binning errors should be accommodated
 # anyway, first arg sets timing spread sigma
-beamTiming = beamTimingShape.gaussianTiming(4, 4)
+#
+# UPDATE: July 14 2020, improved timing in TOF spectra from CFD-like approach
+# this means the sigma in the gaussians fit to gamma peak in data is smaller
+# 2.7(ish) is the largest observed
+beamTiming = beamTimingShape.gaussianTiming(2.7, 4)
 zeroDegTimeSpreader = zeroDegreeTimingSpread()
 
 # stopping power model and parameters
@@ -385,7 +399,7 @@ def generateModelData_ode(params, standoffDistance, range_tof, nBins_tof, ddnXSf
 
 # TODO: make better implementation of 0deg transit time
 zeroDegSpread_binCenters = np.linspace(0, 24, 7, True)
-zeroDegSpread_vals = np.exp(-zeroDegSpread_binCenters/2) /np.sum(np.exp(-zeroDegSpread_binCenters/2))
+zeroDegSpread_vals = np.exp(-zeroDegSpread_binCenters/4.) /np.sum(np.exp(-zeroDegSpread_binCenters/4.))
 
 # introduce a ~10% attentuation of beam intensity across cell
 #attenuationWeights = np.exp(- x_binCenters/20)
@@ -567,7 +581,7 @@ def compoundLnlike(params, observables, standoffDists, tofRanges, tofBinnings,
     
 # PARAMETER BOUNDARIES
 min_beamE, max_beamE = 1800.0, 2700.0 # CONFER WITH TANDEM LOGS
-min_eLoss, max_eLoss = 200.0,1400.0
+min_eLoss, max_eLoss = 200.0,1800.0
 min_scale, max_scale = 10.0, 700.0
 min_s, max_s = 0.05, 3.0
 paramRanges = []
@@ -704,10 +718,10 @@ for i in range(nRuns):
 #raise SystemExit
 
 
-beamE_guess = 2450.0 # initial deuteron energy, in keV, guess based on TV of tandem
-eLoss_guess = 1200.0 # central location of energy lost (keV) in havar foil, based on SRIM ish
-scale_guess = 50.0
-s_guess = 0.1
+beamE_guess = 2300.0 # initial deuteron energy, in keV, guess based on TV of tandem
+eLoss_guess = 1000.0 # central location of energy lost (keV) in havar foil, based on SRIM ish
+scale_guess = 70.0
+s_guess = 0.4
 
 paramGuesses = [beamE_guess, eLoss_guess, scale_guess, s_guess]
 #badGuesses = [e0_bad, sigma0_bad, skew_bad]
@@ -822,7 +836,7 @@ if debugging:
     if parsedArgs.nWalkers != 256:
         nWalkers = parsedArgs.nWalkers
 
-p0agitators = [10, 50, 20, 0.05]
+p0agitators = [150, 100, 20, 0.1]
 for guess in paramGuesses[4:]:
     p0agitators.append(guess * 0.15)
 

@@ -69,6 +69,7 @@ argParser.add_argument('-outputPrefix', type=str, default='')
 argParser.add_argument('-nWalkers', type=int, default=256)
 argParser.add_argument('-qnd', type=int, default=0, choices=[0,1], help='Quick and dirty (0,1): reduce binning behind the scenes')
 argParser.add_argument('-quickish', type=int, default=0, choices=[0,1])
+argParser.add_argument('-hardcore', type=int, default=0, choices=[0,1])
 argParser.add_argument('-shiftTOF', type=int, default=0, help='Shifts the observed data by specified number of TOF bins')
 
 parsedArgs = argParser.parse_args()
@@ -84,6 +85,7 @@ outputPrefix = parsedArgs.outputPrefix
 quickAndDirty = True if parsedArgs.qnd == 1 else 0
 tofShift = parsedArgs.shiftTOF
 quickish = True if parsedArgs.quickish == 1 else 0
+hardcore = True if parsedArgs.hardcore == 1 else 0
 
 # batchMode turns off plotting and extraneous stuff like test NLL eval at beginning 
 batchMode = False
@@ -118,6 +120,9 @@ if quickAndDirty == True:
 
 if quickish == True:
     print('\n\nRUNNING KINDA QUICK\n\n')
+
+if hardcore == True:
+    print('\n\nRUNNING HARDCORE (higher bin count)\n\n')
 
 if tofShift != 0:
     print('\n\nSHIFTING TOF DATA BY {} BINS\n\n'.format(tofShift))
@@ -192,6 +197,9 @@ tofRunBins = [tof_nBins['close'],
 eD_bins = 100
 # if quickAndDirty == True:
 #     eD_bins = 20
+if hardcore == True:
+    eD_bins = 200
+    
 eD_minRange = 200.0
 eD_maxRange = 2200.0
 eD_range = (eD_minRange, eD_maxRange)
@@ -204,6 +212,9 @@ eD_binCenters = np.linspace(eD_minRange + eD_binSize/2,
 x_bins = 10
 # if quickAndDirty == True:
 #     x_bins = 5
+if hardcore == True:
+    x_bins = 20
+
 x_minRange = 0.0
 x_maxRange = distances.tunlSSA_CsI_oneBD.cellLength
 x_range = (x_minRange,x_maxRange)
@@ -399,7 +410,7 @@ def generateModelData_ode(params, standoffDistance, range_tof, nBins_tof, ddnXSf
 
 # TODO: make better implementation of 0deg transit time
 zeroDegSpread_binCenters = np.linspace(0, 24, 7, True)
-zeroDegSpread_vals = np.exp(-zeroDegSpread_binCenters/4.) /np.sum(np.exp(-zeroDegSpread_binCenters/4.))
+zeroDegSpread_vals = np.exp(-zeroDegSpread_binCenters/2.) /np.sum(np.exp(-zeroDegSpread_binCenters/2.))
 
 # introduce a ~10% attentuation of beam intensity across cell
 #attenuationWeights = np.exp(- x_binCenters/20)

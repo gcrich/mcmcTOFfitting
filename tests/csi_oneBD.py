@@ -42,6 +42,7 @@ from utilities.utilities import (beamTimingShape, ddnXSinterpolator,
 from utilities.utilities import zeroDegreeTimingSpread
 from utilities.utilities import readMultiStandoffTOFdata
 from utilities.ionStopping import ionStopping
+from initialization import initialize_oneBD
 from math import isnan
 import gc
 #from fast_histogram import histogram1d
@@ -195,33 +196,19 @@ tofRunBins = [tof_nBins['close'],
 
 # range of eD expanded for seemingly higher energy oneBD neutron beam
 eD_bins = 100
+x_bins = 10
 # if quickAndDirty == True:
 #     eD_bins = 20
 if hardcore == True:
     eD_bins = 200
-    
-eD_minRange = 200.0
-eD_maxRange = 2200.0
-eD_range = (eD_minRange, eD_maxRange)
-eD_binSize = (eD_maxRange - eD_minRange)/eD_bins
-eD_binCenters = np.linspace(eD_minRange + eD_binSize/2,
-                            eD_maxRange - eD_binSize/2,
-                            eD_bins)
-
-
-x_bins = 10
-# if quickAndDirty == True:
-#     x_bins = 5
-if hardcore == True:
     x_bins = 20
 
-x_minRange = 0.0
-x_maxRange = distances.tunlSSA_CsI_oneBD.cellLength
-x_range = (x_minRange,x_maxRange)
-x_binSize = (x_maxRange - x_minRange)/x_bins
-x_binCenters = np.linspace(x_minRange + x_binSize/2,
-                           x_maxRange - x_binSize/2,
-                           x_bins)
+eD_bins, eD_range, eD_binSize, eD_binCenters = initialize_oneBD.setupDeuteronBinning(eD_bins)
+x_bins, x_range, x_binSize, x_binCenters = initialize_oneBD.setupXbinning(x_bins)
+
+eD_minRange, eD_maxRange = eD_range
+x_minRange, x_maxRange = x_range
+
 
 # these will get used frequently, so just make them once
 neutronFlightPaths = [distances.tunlSSA_CsI_oneBD.cellLength + standoff - x_binCenters for standoff in standoffs]

@@ -1,5 +1,5 @@
 #
-# ppcTools.py
+# ppcTools_oneBD.py
 #
 # part of mcmcTOFfitting
 # this is a set of utilities that assist in the sampling of a posterior distr.
@@ -18,6 +18,7 @@ from constants.constants import (masses, distances, physics, tofWindows)
 from utilities.utilities import (beamTimingShape, ddnXSinterpolator,
                                  getDDneutronEnergy, readChainFromFile,
                                  getTOF, zeroDegreeTimingSpread)
+#from utilities.ionStopping import ionStopping
 from utilities.ionStopping import ionStopping
 from scipy.stats import (lognorm, skewnorm, norm)
 
@@ -91,11 +92,25 @@ data_x = np.repeat(x_binCenters,nEvPerLoop)
 
 ddnXSinstance = ddnXSinterpolator()
 
-beamTiming = beamTimingShape.gaussianTiming(4, 4)
-zeroDegTimeSpreader = zeroDegreeTimingSpread()
 # TODO: make better implementation of 0deg transit time
 zeroDegSpread_binCenters = np.linspace(0, 24, 7, True)
-zeroDegSpread_vals = np.exp(-zeroDegSpread_binCenters/2) /np.sum(np.exp(-zeroDegSpread_binCenters/2))
+zeroDegSpread_vals = np.exp(-zeroDegSpread_binCenters/4.) /np.sum(np.exp(-zeroDegSpread_binCenters/4.))
+
+ddnXSinstance = ddnXSinterpolator()
+# 
+# SET UP THE BEAM TIMING SPREAD
+# 
+# for one-BD data, binning is 4ns
+# spread, based on TF1 fits to gamma peak, is ~4 ns
+# to incorporate potential binning errors, maybe 4+4 in quadrature? (this is ~5.65)
+# this is perhaps not where binning errors should be accommodated
+# anyway, first arg sets timing spread sigma
+#
+# UPDATE: July 14 2020, improved timing in TOF spectra from CFD-like approach
+# this means the sigma in the gaussians fit to gamma peak in data is smaller
+# 2.7(ish) is the largest observed
+beamTiming = beamTimingShape.gaussianTiming(2.7, 4)
+zeroDegTimeSpreader = zeroDegreeTimingSpread()
 
 # stopping power model and parameters
 stoppingMedia_Z = 1
@@ -104,7 +119,6 @@ stoppingMedia_A = 2
 stoppingMedia_rho = 4*8.565e-5 # assume density scales like pressure!
 # earlier runs were at 0.5 atm, this run was at 2 atm
 incidentIon_charge = 1
-
 
 # NOTE: this value (19.2) is from PDG
 # http://pdg.lbl.gov/2016/AtomicNuclearProperties/HTML/deuterium_gas.html
@@ -241,7 +255,7 @@ class ppcTools_oneBD:
         
 
         
-    def generatePPC(self, nChainEntries=500):
+    def generatePPC(self, nChainEntries=500, lnprobcut=0.):
         """Sample from the posterior and produce data in the observable space
         
         nChainEntries specifies the number of times to sample the posterior
@@ -251,9 +265,16 @@ class ppcTools_oneBD:
         generatedNeutronSpectra=[]
         generatedDeuteronSpectra=[]
         totalChainSamples = len(self.chain[-50:,:,0].flatten())
+        if lnprobcut != 0.:
+            flatProbCutIndices = np.where(self.probs[-50:,:].flatten() > lnprobcut)
+            totalChainSamples = len(flatProbCutIndices)
+
         
         # TODO: this next line could mean we repeat the same sample, i think
         samplesToGet = np.random.randint(0, totalChainSamples, size=nChainEntries)
+        if lnprobcut != 0.:
+            # if we're getting samples subject to lnprob cut, get those indices
+            samplesToGet = flatProbCutIndices[samplesToGet]
         for sampleToGet in samplesToGet:
             modelParams = []
             for nParam in range(self.nParams):

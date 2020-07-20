@@ -19,12 +19,22 @@ import csv as csvlib
 import argparse
 from numbers import Number
 #import readChainFromFile
-from utilities.utilities import readChainFromFile
-from utilities import ppcTools_oneBD
+#from utilities import readChainFromFile
+#from utilities import ppcTools_oneBD
+import ppcTools_oneBD
+
+
+
+
 argParser = argparse.ArgumentParser()
 argParser.add_argument('-file')
+argParser.add_argument('-lnprobCut',type=float, default=0., help="Only show steps below this LNprob value")
 parsedArgs = argParser.parse_args()
 chainFilename = parsedArgs.file
+lnprobCut = parsedArgs.lnprobCut
+
+
+parameterLabels = [r'$E_{beam}$ (keV)', r'$\theta$ (keV)', r'$m$ (keV)', r'$\sigma$ (1 / keV)']
 
 #chainList = []
 #probsList = []
@@ -101,6 +111,15 @@ nSteps = thePPCobject.nSteps
 
 steps = np.linspace(1, nSteps, nSteps)
 
+if lnprobCut != 0.:
+    probCutIndices = np.where(probs > lnprobCut)
+    print('probcut {}\n'.format(probCutIndices))
+    print('probcut len {}\n'.format(len(probCutIndices)))
+    print('probcut len 0 {}\n'.format(len(probCutIndices[0])))
+    print('probcut len 1 {}\n'.format(len(probCutIndices[1])))
+    probCutSteps, probCutWalkers = probCutIndices
+    # i think the format here is probcutIndices[0] -> sample
+    # probcutIndices[1] -> walker
 
 #plt.figure()
 #for paramNum in range(nParams):
@@ -119,9 +138,14 @@ steps = np.linspace(1, nSteps, nSteps)
 fig, axes = plt.subplots(4, sharex=True, figsize =(8.5,10.51))
 for ax, chainSamples, label in zip(axes, 
                             [chain[:,:,0],chain[:,:,1], chain[:,:,2], chain[:,:,3]],
-                            [r'$E_{beam}$ (keV)', r'$\theta$ (keV)', r'$m$ (keV)', r'$\sigma$ (1 / keV)']):#[r'$E_{beam}$ (keV)',r'$f_1$',r'$f_2$',r'$f_3$']):
+                            parameterLabels):#[r'$E_{beam}$ (keV)',r'$f_1$',r'$f_2$',r'$f_3$']):
     ax.plot(steps, chainSamples, alpha=0.2, color='k')
     ax.set_ylabel(label)
+# if lnprobCut != 0:
+#     for ax, chainSamples, label in zip(axes,
+#     [chain[probCutIndices[0], probCutIndices[1],0], chain[probCutIndices[0],probCutIndices[1],1], chain[probCutIndices[0],probCutIndices[1],2], chain[probCutIndices[0], probCutIndices[1], 3], [r'$E_{beam}$ (keV)', r'$\theta$ (keV)', r'$m$ (keV)', r'$\sigma$ (1 / keV)']):
+#         ax.plot(steps, chainSamples, alpha=0.3, color='r')
+
 #axes[0].plot(steps, chain[:,:,0], color='k', alpha=0.2)
 #plt.ylabel('$E_{beam}$ (keV)')
 #plt.subplot(412)
@@ -167,9 +191,12 @@ plt.figure()
 plt.scatter(bins[:-1],hist)
 plt.draw()
 
-plt.figure()
-plt.scatter(chain[:,:,0], probs[:,:], alpha=0.05)
+fig, ((ax1,ax2),(ax3,ax4)) = plt.subplots(2,2, sharey=True)
+for ax, chainsub, parlabel in zip([ax1,ax2,ax3,ax4], [chain[:,:,0], chain[:,:,1], chain[:,:,2], chain[:,:,3]], parameterLabels):
+        ax.scatter(chainsub, probs[:,:], alpha=0.05, c='k', marker=',')
+        ax.set_xlabel(parlabel)
 plt.draw()
+plt.savefig('lnprob_params.png',dpi=300)
 
 plt.show()
 

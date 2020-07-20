@@ -17,16 +17,20 @@ import argparse
 # list flattener from http://stackoverflow.com/questions/952914/making-a-flat-list-out-of-list-of-lists-in-python
 flattenList = lambda l: [item for sublist in l for item in sublist]
 
-defaultInputDataFilename = '/Users/grayson/Documents/quenchingFactors/csi_oneBD/tof/oneBD_mcmcInputData.dat'
+defaultInputDataFilename = '/var/phy/project/phil/shared/quenchingFactors/csi_oneBD/tof/oneBD_CFD20_mcmcInputData.dat'
+
+defaultChainDataFilename = '/home/gcr/Documents/quenchingFactors/csi_oneBD/tof/mcmcFits/cfdTiming_bestFit_15-07-2020/oneBD_mainchain.dat'
 
 argParser = argparse.ArgumentParser()
-argParser.add_argument('-file', default='/Users/grayson/Documents/mcmcTOFfitting/oneBD/oneBD_burninchain.dat')
+argParser.add_argument('-file', default=defaultChainDataFilename, type=str)
 argParser.add_argument('-inputDataFilename', default=defaultInputDataFilename, type=str)
 argParser.add_argument('-shiftTOF', type=int, default=0)
+argParser.add_argument('-lnprobcut', type=float, default=0.)
 parsedArgs = argParser.parse_args()
 chainFilename = parsedArgs.file
 inputDataFilename = parsedArgs.inputDataFilename
 tofShift = parsedArgs.shiftTOF
+lnprobcut = parsedArgs.lnprobcut
 
 # DEFINE BINNING AND SHIT
 nRuns = 3
@@ -110,7 +114,7 @@ nSteps = ppcTool.nSteps
 
 steps = np.linspace(1, nSteps, nSteps)
 
-returnVal = ppcTool.generatePPC(50)
+returnVal = ppcTool.generatePPC(50, lnprobcut)
 ppc = returnVal[0]
 
 collectedPPCs = [ppc0 for ppc0 in ppc[0]]
@@ -161,7 +165,7 @@ for i in range(nRuns):
     observedTOFbinEdges.append(tofData[:,0][(binEdges>=tof_minRange[i])&(binEdges<tof_maxRange[i])])
 
 
-    runColors = ["#ff678f", "#004edc", "#e16400"] 
+runColors = ["#ff678f", "#004edc", "#e16400"] 
 runNames=['Close', 'Middle', 'Far']         
 tofXvals = [np.linspace(minT, maxT, bins) for minT, maxT, bins in zip(tof_minRange, tof_maxRange, tofRunBins)]
 fig, axes = plt.subplots(nRuns, figsize =(8.5,10.51))
@@ -214,6 +218,15 @@ firstZero = np.where(rebinnedHist ==0)[0][0]
 rebinnedHist_truncated = rebinnedHist[:firstZero]
 rebinnedCenters_truncated = rebinnedCenters[:firstZero]
 
+# write csv file with rebinned neutron energy distribution
+# format is <bin center>, <bin content>
+# bin contents are normalized so that integral is 1
+histIntegral = np.sum(rebinnedHist)
+with open('neutronEnergyDist.csv', 'w') as distCsvFile:
+    for binCenter, binContent in zip(rebinnedCenters, rebinnedHist):
+        distCsvFile.write('{:.3f}, {:.3e}\n'.format(binCenter/1000., 
+            binContent / histIntegral))
+
 siStrings = ['si{} a'.format(100)]
 spStrings = ['sp{}'.format(100)]
 for eN, counts in zip(rebinnedCenters_truncated, rebinnedHist_truncated):
@@ -226,7 +239,8 @@ with open('sdefout.txt','w') as file:
     file.write(spString)
 
 fig, ax = plt.subplots(figsize=(8.5,5.25))
-ax.scatter(enBins, enHist/1.e11)
+#ax.scatter(enBins, enHist/1.e11)
+ax.scatter(rebinnedCenters, rebinnedHist/np.sum(rebinnedHist))
 ax.set_xlim(3.e3, 5.5e3)
 ax.set_ylabel('Intensity (arb units)')
 ax.set_xlabel('Neutron energy (keV)')

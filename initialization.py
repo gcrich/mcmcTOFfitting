@@ -13,7 +13,7 @@ from constants.constants import experimentConsts
 class initialize_oneBD:
 
     @staticmethod
-    def setupDeuteronBinning(nBins = 200, eD_minRange = 200., eD_maxRange = 2200.):
+    def setupDeuteronBinning(nBins = 400, eD_minRange = 200., eD_maxRange = 2200.):
         # range of eD expanded for seemingly higher energy oneBD neutron beam
 
         eD_range = (eD_minRange, eD_maxRange)

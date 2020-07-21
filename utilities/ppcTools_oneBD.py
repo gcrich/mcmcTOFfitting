@@ -19,8 +19,9 @@ from utilities.utilities import (beamTimingShape, ddnXSinterpolator,
                                  getDDneutronEnergy, readChainFromFile,
                                  getTOF, zeroDegreeTimingSpread)
 from utilities.ionStopping import ionStopping
-from initialization import initialize_oneBD
 #from ionStopping import ionStopping
+from constants.constants import experimentConsts
+from initialization import initialize_oneBD
 from scipy.stats import (lognorm, skewnorm, norm)
 
 
@@ -130,6 +131,8 @@ eD_stoppingApprox_binning = (100,2400,100)
 stoppingApprox = ionStopping.betheApprox(stoppingModel, eD_stoppingApprox_binning, x_binCenters)
 
 dataHist = np.zeros((x_bins, eD_bins))
+# introduce a ~10% attentuation of beam intensity across cell
+cellAttenuationWeights = initialize_oneBD.getCellAttenuationCoeffs(x_binCenters)
 
 class ppcTools_oneBD:
     """Assist in the sampling of posterior distributions from MCMC TOF fits
@@ -158,8 +161,23 @@ class ppcTools_oneBD:
         self.tofData = None
         self.neutronSpectra = None
         
+        # flag to use "old" energy parameterization
+        # old parameterization uses both a beam energy and an energy loss parameter
+        # these are totally degenerate, so it was abandoned in favor of a single (loss) parameter w.r.t. a reference energy
+        self.oldEnergyParams = False
+
         
-        self.paramNames = ['$E_0$', '$f_1$', '$f_2$', '$f_3$']
+
+        if self.nParams == 10:
+            if self.oldEnergyParams == True:
+                self.paramNames = [r'$E_0$', r'$f_1$', r'$f_2$', r'$f_3$']
+                self.nParamsOfInterest = 4
+        if self.nParams == 9:
+            self.paramNames = [r'$\Delta E_0$', r'Scale', r's']
+            self.nParamsOfInterest = 3
+
+        
+
         [self.paramNames.append(r'$N_{}$'.format(runId)) for runId in range(nRuns)]
         [self.paramNames.append(r'$BG_{}$'.format(runId)) for runId in range(nRuns)]
         
@@ -176,16 +194,20 @@ class ppcTools_oneBD:
         
         storeDTOF is an option added to add capabilities in MCNP SDEF generation
         """
-        beamE, eLoss, scale, s, scaleFactor, bgLevel = params
-        e0mean = 900.0
-        dataHist = np.zeros((x_bins, eD_bins))
-        
+        if self.oldEnergyParams == True:
+            beamE, eLoss, scale, s, scaleFactor, bgLevel = params
+        else:
+            eLoss, scale, s, scaleFactor, bgLevel = params
+            beamE = experimentConsts.csi_oneBD.beamReferenceEnergy
+        e0mean = 1500.0
+    
 
-        
         nLoops = int(np.ceil(nSamples / nEvPerLoop))
         solutions = np.zeros((nEvPerLoop,x_bins))
 
         for loopNum in range(0, nLoops):
+            # maybe pull out definition of eZeros? 
+            # can really just be run .. once.. 
             eZeros = np.repeat(beamE, nEvPerLoop)
             eZeros -= lognorm.rvs(s=s, loc=eLoss, scale=scale, size=nEvPerLoop)
             
@@ -196,8 +218,9 @@ class ppcTools_oneBD:
             for idx,eZero in enumerate(eZeros):
                 sol = stoppingApprox.evalStopped(eZero, x_binCenters)
                 solutions[idx,:] = sol
-            for idx, xStepSol in enumerate(solutions.T):
-                data_weights = ddnXSfxn.evaluate(xStepSol)
+            for idx,(xStepSol, attenuationFactor) in enumerate(zip(solutions.T, cellAttenuationWeights)):
+                # weight is based on DDN cross section and any attenuation due to location in cell
+                data_weights = ddnXSfxn.evaluate(xStepSol) * attenuationFactor
                 hist, edEdges = np.histogram( xStepSol, bins=eD_bins, range=(eD_minRange, eD_maxRange), weights=data_weights)
                 dataHist[idx,:] = hist
                 noWeight_hist, edEdges = np.histogram( xStepSol, bins=eD_bins, range=(eD_minRange, eD_maxRange))
@@ -244,44 +267,58 @@ class ppcTools_oneBD:
         
 
         
-    def generatePPC(self, nChainEntries=500, lnprobcut=0.):
+    def generatePPC(self, nSamples = 50, nChainEntries=50, lnprobcut=0.):
         """Sample from the posterior and produce data in the observable space
         
-        nChainEntries specifies the number of times to sample the posterior
-        nSamplesFromTOF is the number of deuteron tracks to produce for a given set of parameters
+        nChainEntries specifies the number of steps in the chain(s) to consider when drawing samples
+        nSamples is the number of parameter samples to include in the PPC
         """
         generatedData = []
         generatedNeutronSpectra=[]
         generatedDeuteronSpectra=[]
-        totalChainSamples = len(self.chain[-50:,:,0].flatten())
+        totalChainSamples = len(self.chain[-nChainEntries:,:,0].flatten())
         if lnprobcut != 0.:
-            flatProbCutIndices = np.where(self.probs[-50:,:].flatten() > lnprobcut)
+            flatProbCutIndices = np.where(self.probs[-nChainEntries:,:].flatten() > lnprobcut)
             totalChainSamples = len(flatProbCutIndices)
 
         
         # TODO: this next line could mean we repeat the same sample, i think
-        samplesToGet = np.random.randint(0, totalChainSamples, size=nChainEntries)
+        samplesToGet = np.random.randint(0, totalChainSamples, size=nSamples)
         if lnprobcut != 0.:
             # if we're getting samples subject to lnprob cut, get those indices
             samplesToGet = flatProbCutIndices[samplesToGet]
         for sampleToGet in samplesToGet:
             modelParams = []
             for nParam in range(self.nParams):
-                modelParams.append(self.chain[-50:,:,nParam].flatten()[sampleToGet])
-                
-                
-            e0, loc, scale, s = modelParams[:4]
-            scaleFactorEntries = modelParams[4:4+nRuns]
+                modelParams.append(self.chain[-nChainEntries:,:,nParam].flatten()[sampleToGet])
+
+            scaleFactorEntries = modelParams[self.nParamsOfInterest:self.nParamsOfInterest+nRuns]
             bgEntries = modelParams[-nRuns:]
-            returnedData = [self.generateModelData([e0, loc, scale, s, scaleFactor, bgScale],
-                                       standoff, tofrange, tofbins,
-                                       ddnXSinstance, stoppingApprox,
-                                       beamTiming, nSamples, True) for
-                                       scaleFactor, bgScale, standoff, tofrange, tofbins
-                                       in zip(scaleFactorEntries, bgEntries, 
-                                              standoffs[:nRuns],
-                                              tof_range[:nRuns],
-                                              tofRunBins[:nRuns])]
+
+            if self.oldEnergyParams == True and self.nParams == 10:    
+                e0, loc, scale, s = modelParams[:4]
+            
+                returnedData = [self.generateModelData([e0, loc, scale, s, scaleFactor, bgScale],
+                                        standoff, tofrange, tofbins,
+                                        ddnXSinstance, stoppingApprox,
+                                        beamTiming, nSamples, True) for
+                                        scaleFactor, bgScale, standoff, tofrange, tofbins
+                                        in zip(scaleFactorEntries, bgEntries, 
+                                                standoffs[:nRuns],
+                                                tof_range[:nRuns],
+                                                tofRunBins[:nRuns])]
+            if self.nParams == 9:    
+                deltaE, scale, s = modelParams[:3]
+            
+                returnedData = [self.generateModelData([deltaE, scale, s, scaleFactor, bgScale],
+                                        standoff, tofrange, tofbins,
+                                        ddnXSinstance, stoppingApprox,
+                                        beamTiming, nSamples, True) for
+                                        scaleFactor, bgScale, standoff, tofrange, tofbins
+                                        in zip(scaleFactorEntries, bgEntries, 
+                                                standoffs[:nRuns],
+                                                tof_range[:nRuns],
+                                                tofRunBins[:nRuns])]
             # returned data is an array of .. a tuple (modelData, neutronSpectrum, deuteronSpectrum)
             modelData = []
             modelNeutronSpectrum = []

@@ -9,6 +9,7 @@ from utilities.utilities import (beamTimingShape, ddnXSinterpolator,
                                  getTOF, readMultiStandoffTOFdata)
 from utilities.ionStopping import ionStopping
 from utilities import ppcTools_oneBD
+from constants.constants import experimentConsts
 from initialization import initialize_oneBD
 from scipy.stats import (skewnorm, lognorm)
 from matplotlib import rcParams
@@ -27,11 +28,13 @@ argParser.add_argument('-file', default=defaultChainDataFilename, type=str)
 argParser.add_argument('-inputDataFilename', default=defaultInputDataFilename, type=str)
 argParser.add_argument('-shiftTOF', type=int, default=0)
 argParser.add_argument('-lnprobcut', type=float, default=0.)
+argParser.add_argument('-nSteps', type=int, default=50, help='Specify number of (most recent) steps in chain to use')
 parsedArgs = argParser.parse_args()
 chainFilename = parsedArgs.file
 inputDataFilename = parsedArgs.inputDataFilename
 tofShift = parsedArgs.shiftTOF
 lnprobcut = parsedArgs.lnprobcut
+nStepsToSample = parsedArgs.nSteps
 
 # DEFINE BINNING AND SHIT
 nRuns = 3
@@ -102,7 +105,7 @@ nSteps = ppcTool.nSteps
 
 steps = np.linspace(1, nSteps, nSteps)
 
-returnVal = ppcTool.generatePPC(50, lnprobcut)
+returnVal = ppcTool.generatePPC(50, 15, lnprobcut)
 ppc = returnVal[0]
 
 collectedPPCs = [ppc0 for ppc0 in ppc[0]]

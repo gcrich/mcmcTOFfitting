@@ -201,7 +201,7 @@ x_bins = 10
 # if quickAndDirty == True:
 #     eD_bins = 20
 if hardcore == True:
-    eD_bins = 200
+    eD_bins = 400
     x_bins = 20
 
 
@@ -738,9 +738,13 @@ paramGuesses = [eLoss_guess, scale_guess, s_guess]
 #badGuesses = [e0_bad, sigma0_bad, skew_bad]
 scaleFactor_guesses = []
 for i in range(nRuns):
-    scaleFactor_guesses.append(5 * np.sum(observedTOF[i]))
-    paramGuesses.append(np.sum(observedTOF[i]))
-    #badGuesses.append(np.sum(observedTOF[i]))
+    theGuess = 5 * np.sum(observedTOF[i])
+    scaleFactor_guesses.append(theGuess)
+    paramGuesses.append(theGuess)
+# for guess in [7.e6, 5.e6, 5.e6]:
+#     scaleFactor_guesses.append(guess)
+#     paramGuesses.append(guess)
+
 
 bgLevel_guesses = []
 for i in range(nRuns):

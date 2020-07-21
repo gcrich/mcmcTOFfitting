@@ -8,6 +8,7 @@
 #
 import numpy as np
 from constants.constants import (masses, distances, physics, tofWindows)
+from constants.constants import experimentConsts
 
 class initialize_oneBD:
 
@@ -33,3 +34,10 @@ class initialize_oneBD:
                                 x_maxRange - x_binSize/2,
                                 nBins)
         return nBins, x_range, x_binSize, x_binCenters
+
+    @staticmethod
+    def getCellAttenuationCoeffs( xpoints ):
+        """
+        Returns array of weighting factors introducing attenuation along length of gas cell.
+        """
+        return np.exp(-xpoints / experimentConsts.csi_oneBD.gasCellAttentuationLength)

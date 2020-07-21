@@ -408,7 +408,7 @@ zeroDegSpread_binCenters = np.linspace(0, 24, 7, True)
 zeroDegSpread_vals = np.exp(-zeroDegSpread_binCenters/2.) /np.sum(np.exp(-zeroDegSpread_binCenters/2.))
 
 # introduce a ~10% attentuation of beam intensity across cell
-#attenuationWeights = np.exp(- x_binCenters/20)
+cellAttenuationWeights = initialize_oneBD.getCellAttenuationCoeffs(x_binCenters)
 
 dataHist = np.zeros((x_bins, eD_bins))
 
@@ -457,8 +457,9 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
 
         #dataHist = np.zeros(eD_bins)
         
-        for idx,xStepSol in enumerate(solutions.T):
-            data_weights = ddnXSfxn.evaluate(xStepSol)
+        for idx,(xStepSol, attenuationFactor) in enumerate(zip(solutions.T, cellAttenuationWeights)):
+            # weight is based on DDN cross section and any attenuation due to location in cell
+            data_weights = ddnXSfxn.evaluate(xStepSol) * attenuationFactor
             hist, edEdges = np.histogram(xStepSol, bins=eD_bins, range=(eD_minRange, eD_maxRange), weights=data_weights)
             #dataHist = np.vstack((dataHist,hist))
             dataHist[idx,:] = hist

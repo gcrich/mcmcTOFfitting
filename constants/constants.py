@@ -126,3 +126,7 @@ class tofWindows(object):
 class experimentConsts(object):
     class csi_oneBD(object):
         beamReferenceEnergy = 2490. # keV
+
+        # gasCellAttenuationLength models flux attenuation across D cell
+        # a value of 20. cm gives a ~10% drop in flux at the end of the cell
+        gasCellAttentuationLength = 20. # cm

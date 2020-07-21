@@ -9,6 +9,7 @@ from utilities.utilities import (beamTimingShape, ddnXSinterpolator,
                                  getTOF, readMultiStandoffTOFdata)
 from utilities.ionStopping import ionStopping
 from utilities import ppcTools_oneBD
+from initialization import initialize_oneBD
 from scipy.stats import (skewnorm, lognorm)
 from matplotlib import rcParams
 import argparse
@@ -70,31 +71,18 @@ tofRunBins = [tof_nBins['close'],
                 tof_nBins['far']]
 
 
-# range of eD expanded for seemingly higher energy oneBD neutron beam
-eD_bins = 100
-# if quickAndDirty == True:
-#     eD_bins = 20
-eD_minRange = 200.0
-eD_maxRange = 2200.0
-eD_range = (eD_minRange, eD_maxRange)
-eD_binSize = (eD_maxRange - eD_minRange)/eD_bins
-eD_binCenters = np.linspace(eD_minRange + eD_binSize/2,
-                            eD_maxRange - eD_binSize/2,
-                            eD_bins)
+################################################
+# binning set up
 
+eD_bins, eD_range, eD_binSize, eD_binCenters = initialize_oneBD.setupDeuteronBinning()
+x_bins, x_range, x_binSize, x_binCenters = initialize_oneBD.setupXbinning()
 
-x_bins = 10
-# if quickAndDirty == True:
-#     x_bins = 5
-x_minRange = 0.0
-x_maxRange = distances.tunlSSA_CsI_oneBD.cellLength
-x_range = (x_minRange,x_maxRange)
-x_binSize = (x_maxRange - x_minRange)/x_bins
-x_binCenters = np.linspace(x_minRange + x_binSize/2,
-                           x_maxRange - x_binSize/2,
-                           x_bins)
+eD_minRange, eD_maxRange = eD_range
+x_minRange, x_maxRange = x_range
 
+eN_binCenters = getDDneutronEnergy( eD_binCenters )
 
+################################################
 
 
 

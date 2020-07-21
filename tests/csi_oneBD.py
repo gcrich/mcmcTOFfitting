@@ -512,8 +512,8 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
     #print('shape of tofs and tofWeights: {} {}\n'.format(len(tofs), len(tofWeights)))
         # TODO: next line needs adjustment if using OLD NUMPY < 1.6.1 
         # if lower than that, use the 'normed' arg, rather than 'density'
-    tofData, tofBinEdges = np.histogram( tofs.flatten(), bins=nBins_tof, range=range_tof,
-                                        weights=tofWeights.flatten(), density=getPDF)
+    tofData, tofBinEdges = np.histogram( tofs.ravel(), bins=nBins_tof, range=range_tof,
+                                        weights=tofWeights.ravel(), density=getPDF)
                                         
     # spread with expo modeling transit time across 0 degree
     tofData = np.convolve(tofData, zeroDegSpread_vals, 'full')[:-len(zeroDegSpread_binCenters)+1]
@@ -578,7 +578,7 @@ def lnlike(params, observables, standoffDist, range_tof, nBins_tof,
 def compoundLnlike(params, observables, standoffDists, tofRanges, tofBinnings, 
                    nDraws=nSamples):
     """Compute the joint likelihood of the model with each of the runs at different standoffs"""
-    paramSets = [[params[0], params[1], params[2], scale, bgLevel] for scale, bgLevel in zip(params[4:-nRuns], params[-nRuns:])]
+    paramSets = [[params[0], params[1], params[2], scale, bgLevel] for scale, bgLevel in zip(params[3:-nRuns], params[-nRuns:])]
     loglike = [lnlike(paramSet, obsSet, standoff, tofrange, tofbin, nDraws) for
                paramSet, obsSet, standoff, tofrange, tofbin in 
                zip(paramSets, observables, standoffDists, tofRanges, 

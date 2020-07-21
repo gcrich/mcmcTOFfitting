@@ -37,6 +37,7 @@ import csv as csvlib
 import argparse
 from numbers import Number
 from constants.constants import (masses, distances, physics, tofWindows)
+from constants.constants import experimentConsts
 from utilities.utilities import (beamTimingShape, ddnXSinterpolator, 
                                  getDDneutronEnergy)
 from utilities.utilities import zeroDegreeTimingSpread
@@ -203,12 +204,19 @@ if hardcore == True:
     eD_bins = 200
     x_bins = 20
 
+
+################################################
+# binning set up
+
 eD_bins, eD_range, eD_binSize, eD_binCenters = initialize_oneBD.setupDeuteronBinning(eD_bins)
 x_bins, x_range, x_binSize, x_binCenters = initialize_oneBD.setupXbinning(x_bins)
 
 eD_minRange, eD_maxRange = eD_range
 x_minRange, x_maxRange = x_range
 
+eN_binCenters = getDDneutronEnergy( eD_binCenters )
+
+################################################
 
 # these will get used frequently, so just make them once
 neutronFlightPaths = [distances.tunlSSA_CsI_oneBD.cellLength + standoff - x_binCenters for standoff in standoffs]
@@ -280,7 +288,7 @@ stoppingModelParams = [stoppingMedia_Z, stoppingMedia_A, stoppingMedia_rho,
 stoppingModel = ionStopping.simpleBethe( stoppingModelParams )
 
     
-eN_binCenters = getDDneutronEnergy( eD_binCenters )
+
 
 eD_stoppingApprox_binning = (100,2400,100)
 
@@ -414,7 +422,8 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
 
     bgLevel parameter treats flat background - it is the lambda parameter of a poisson that is sampled from in each TOF bin
     """
-    beamE, eLoss, scale, s, scaleFactor, bgLevel = params
+    eLoss, scale, s, scaleFactor, bgLevel = params
+    beamE = experimentConsts.csi_oneBD.beamReferenceEnergy
     e0mean = 1500.0
     
     
@@ -424,8 +433,8 @@ def generateModelData(params, standoffDistance, range_tof, nBins_tof, ddnXSfxn,
     solutions = np.zeros((nEvPerLoop,x_bins))
 
     for loopNum in range(0, nLoops):
-        #eZeros = np.random.normal( params[0], params[0]*params[1], nEvPerLoop )
-        #eZeros = skewnorm.rvs(a=skew0, loc=e0, scale=e0*sigma0, size=nEvPerLoop)
+        # maybe pull out definition of eZeros? 
+        # can really just be run .. once.. 
         eZeros = np.repeat(beamE, nEvPerLoop)
         eZeros -= lognorm.rvs(s=s, loc=eLoss, scale=scale, size=nEvPerLoop)
         # checkForBadEs = True
@@ -568,7 +577,7 @@ def lnlike(params, observables, standoffDist, range_tof, nBins_tof,
 def compoundLnlike(params, observables, standoffDists, tofRanges, tofBinnings, 
                    nDraws=nSamples):
     """Compute the joint likelihood of the model with each of the runs at different standoffs"""
-    paramSets = [[params[0], params[1], params[2], params[3], scale, bgLevel] for scale, bgLevel in zip(params[4:-nRuns], params[-nRuns:])]
+    paramSets = [[params[0], params[1], params[2], scale, bgLevel] for scale, bgLevel in zip(params[4:-nRuns], params[-nRuns:])]
     loglike = [lnlike(paramSet, obsSet, standoff, tofrange, tofbin, nDraws) for
                paramSet, obsSet, standoff, tofrange, tofbin in 
                zip(paramSets, observables, standoffDists, tofRanges, 
@@ -578,12 +587,15 @@ def compoundLnlike(params, observables, standoffDists, tofRanges, tofBinnings,
     
     
 # PARAMETER BOUNDARIES
-min_beamE, max_beamE = 1800.0, 2700.0 # CONFER WITH TANDEM LOGS
-min_eLoss, max_eLoss = 200.0,1800.0
+# "BEAM_E" no longer a parameter
+# just use a single, fixed reference energy
+# eliminates a highly correlated duo of parameters
+#min_beamE, max_beamE = 1800.0, 2700.0 # CONFER WITH TANDEM LOGS
+min_eLoss, max_eLoss = 200.0,2000.0
 min_scale, max_scale = 10.0, 700.0
 min_s, max_s = 0.05, 3.0
 paramRanges = []
-paramRanges.append((min_beamE, max_beamE))
+
 paramRanges.append((min_eLoss, max_eLoss))
 paramRanges.append((min_scale, max_scale))
 paramRanges.append((min_s, max_s))
@@ -716,12 +728,12 @@ for i in range(nRuns):
 #raise SystemExit
 
 
-beamE_guess = 2300.0 # initial deuteron energy, in keV, guess based on TV of tandem
-eLoss_guess = 1000.0 # central location of energy lost (keV) in havar foil, based on SRIM ish
-scale_guess = 70.0
-s_guess = 0.4
+#beamE_guess = 2300.0 # initial deuteron energy, in keV, guess based on TV of tandem
+eLoss_guess = 700. # central location of energy lost (keV) in havar foil, based on SRIM ish
+scale_guess = 100.0
+s_guess = 0.5
 
-paramGuesses = [beamE_guess, eLoss_guess, scale_guess, s_guess]
+paramGuesses = [eLoss_guess, scale_guess, s_guess]
 #badGuesses = [e0_bad, sigma0_bad, skew_bad]
 scaleFactor_guesses = []
 for i in range(nRuns):
@@ -740,7 +752,7 @@ for i in range(nRuns):
 if not useMPI:
     if debugging and doPlotting:
         #nSamples = 5000
-        fakeData1 = generateModelData([beamE_guess, eLoss_guess, scale_guess, s_guess, 5000, bgLevel_guesses[0]], 
+        fakeData1 = generateModelData([eLoss_guess, scale_guess, s_guess, 5000, bgLevel_guesses[0]], 
                                      standoffs[0], tof_range[0], tofRunBins[0], 
                                         ddnXSinstance, stoppingApprox, beamTiming,
                                         nEvPerLoop, getPDF=True)
@@ -755,7 +767,7 @@ if not useMPI:
     
     
     if not batchMode:
-        fakeData = [generateModelData([beamE_guess, eLoss_guess, scale_guess, s_guess, sfGuess, bgGuess],
+        fakeData = [generateModelData([eLoss_guess, scale_guess, s_guess, sfGuess, bgGuess],
                                       standoff, tofrange, tofbins, 
                                       ddnXSinstance, stoppingApprox, beamTiming,
                                       nSamples, getPDF=True) for 
@@ -834,8 +846,8 @@ if debugging:
     if parsedArgs.nWalkers != 256:
         nWalkers = parsedArgs.nWalkers
 
-p0agitators = [150, 100, 20, 0.1]
-for guess in paramGuesses[4:]:
+p0agitators = [150, 20, 0.1]
+for guess in paramGuesses[3:]:
     p0agitators.append(guess * 0.15)
 
 p0 = [paramGuesses + p0agitators*np.random.randn(nDim) for i in range(nWalkers)]
@@ -877,23 +889,20 @@ if doPlotting:
     # save an image of the burn in sampling
     if not e0_only:
         plot.figure()
-        plot.subplot(411)
+        plot.subplot(311)
         plot.plot(sampler.chain[:,:,0].T,'-',color='k',alpha=0.2)
-        plot.ylabel(r'$E_0$ (keV)')
-        plot.subplot(412)
+        plot.ylabel(r'$\Delta E_0$ (keV)')
+        plot.subplot(312)
         plot.plot(sampler.chain[:,:,1].T,'-',color='k',alpha=0.2)
-        plot.ylabel(r'loc (keV)')
-        plot.subplot(413)
-        plot.plot(sampler.chain[:,:,2].T,'-',color='k',alpha=0.2)
         plot.ylabel(r'scale')
-        plot.subplot(414)
-        plot.plot(sampler.chain[:,:,3].T,'-', color='k', alpha=0.2)
+        plot.subplot(313)
+        plot.plot(sampler.chain[:,:,2].T,'-', color='k', alpha=0.2)
         plot.ylabel(r's')
         plot.xlabel('Burn-in step')
     else:
         plot.figure()
         plot.plot( sampler.chain[:,:,0].T, '-', color='k', alpha=0.2)
-        plot.ylabel(r'$E_0$ (keV)')
+        plot.ylabel(r'$\Delta E_0$ (keV)')
         plot.xlabel('Step')
     plot.savefig(outputPrefix + 'emceeBurninSampleChainsOut.png',dpi=300)
     plot.draw()
@@ -938,13 +947,12 @@ if not e0_only:
     quartileResults = list(map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]),
                           zip(*np.percentile(samples, [16, 50, 84], axis=0))))
 
-    ed_mcmc, loc_mcmc, scale_mcmc, s_mcmc = quartileResults[:4]
+    ed_mcmc, scale_mcmc, s_mcmc = quartileResults[:3]
     print("""MCMC result:
-        E_D initial = {0[0]} +{0[1]} -{0[2]}
-        loc = {1[0]} +{1[1]} -{1[2]}
-        scale = {2[0]} + {2[1]} - {2[2]}
-        s = {3[0]} + {3[1]} - {3[2]}
-        """.format(ed_mcmc, loc_mcmc, scale_mcmc, s_mcmc))
+        Delta E = {0[0]} +{0[1]} -{0[2]}
+        scale = {1[0]} +{1[1]} -{1[2]}
+        s = {2[0]} + {2[1]} - {2[2]}
+        """.format(ed_mcmc, scale_mcmc, s_mcmc))
     
     
 #    import corner as corn

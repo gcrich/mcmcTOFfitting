@@ -122,3 +122,7 @@ class tofWindows(object):
         midBinning = int((maxRange['mid'] - minRange['mid']) / 4)
         farBinning = int((maxRange['far'] - minRange['far'] ) / 4)
         nBins = {'close': closeBinning, 'mid': midBinning, 'far': farBinning}
+
+class experimentConsts(object):
+    class csi_oneBD(object):
+        beamReferenceEnergy = 2490. # keV
